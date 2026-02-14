@@ -2265,7 +2265,7 @@ const LineRegisterView = () => {
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const LIFF_ID = "2009118538-8SLn1atK"; 
+  const LIFF_ID = "2009131430-9spfjff5"; 
 
   // ฟังก์ชันดึง Profile แบบบังคับ (Force)
   const fetchUserProfile = async () => {
