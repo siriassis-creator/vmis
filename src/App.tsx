@@ -85,7 +85,7 @@ import {
 // 1. Firebase Configuration
 // ==========================================
 const firebaseConfig = {
-  apiKey: 'AIza' + 'SyAyuEF4fDU65TpeVDDnw8l91fwLaYypWXo',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: 'vmis-eeca8.firebaseapp.com',
   projectId: 'vmis-eeca8',
   storageBucket: 'vmis-eeca8.firebasestorage.app',
