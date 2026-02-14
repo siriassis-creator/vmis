@@ -2358,12 +2358,19 @@ const LineRegisterView = () => {
 // ==========================================
 // 4. Main Application Router
 // ==========================================
+// ==========================================
+// 4. Main Application Router
+// ==========================================
 export default function App() {
   return (
     <Router>
       <Routes>
         <Route path="/login" element={<LoginView />} />
         <Route path="/acknowledge" element={<AcknowledgeView />} />
+        
+        {/* 🚀 เพิ่มบรรทัดนี้เพื่อให้หน้าลงทะเบียน LINE ใช้งานได้ */}
+        <Route path="/register" element={<LineRegisterView />} />
+
         <Route path="/" element={<ProtectedRoute><HomeView /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardView /></ProtectedRoute>} />
         <Route path="/workflow" element={<ProtectedRoute><WorkflowView /></ProtectedRoute>} />
