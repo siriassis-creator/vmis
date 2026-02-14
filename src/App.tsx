@@ -62,7 +62,9 @@ import {
   Key,
   Briefcase,
   LogOut,
-  Lock
+  Lock,
+  BookOpen,    // 🚀 เติมคำนี้
+  ArrowRight   // 🚀 เติมคำนี้
 } from 'lucide-react';
 
 import * as XLSX from 'xlsx';
@@ -1811,13 +1813,19 @@ const StockManagementView = () => {
 // ==========================================
 // 🌟 หน้า Reports
 // ==========================================
+// ==========================================
+// 🌟 หน้า Reports & Manual
+// ==========================================
 const ReportsView = () => {
-  const [activeReport, setActiveReport] = useState('email_logs');
+  // 🚀 เปลี่ยนค่าเริ่มต้นให้โชว์หน้าคู่มือเป็นหน้าแรก
+  const [activeReport, setActiveReport] = useState('system_manual');
   const [logs, setLogs] = useState<any[]>([]);
   const [uploadLogs, setUploadLogs] = useState<any[]>([]);
   const [viewingLogDetails, setViewingLogDetails] = useState<any | null>(null);
 
+  // 🚀 เพิ่มเมนู คู่มือการใช้งาน เข้าไปเป็นอันดับแรก
   const reportList = [
+    { id: 'system_manual', title: 'คู่มือและ Flow การทำงาน', icon: BookOpen },
     { id: 'email_logs', title: 'ประวัติการส่ง Email (Logs)', icon: History },
     { id: 'upload_logs', title: 'ประวัติการอัปโหลด (Upload Logs)', icon: UploadCloud },
     { id: 'stock_value', title: 'มูลค่าสต็อกคงเหลือ (เร็วๆ นี้)', icon: DollarSign },
@@ -1838,18 +1846,27 @@ const ReportsView = () => {
   }, []);
 
   return (
-    <PageTemplate title="Reports & Analytics">
+    <PageTemplate title="Reports & System Manual">
       <div className="flex flex-col lg:flex-row gap-6 h-full p-4 md:p-6 max-h-[calc(100vh-64px)] overflow-hidden">
+        
+        {/* Sidebar สำหรับเลือกรายงาน / คู่มือ */}
         <div className="w-full lg:w-72 bg-white border border-slate-200 rounded-2xl p-4 shrink-0 shadow-sm flex flex-col">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 px-2">Report Menu</h3>
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 px-2">Menu</h3>
           <div className="space-y-2 overflow-y-auto">
             {reportList.map((rep) => {
               const IconComp = rep.icon;
               const isActive = activeReport === rep.id;
-              const isFuture = rep.id !== 'email_logs' && rep.id !== 'upload_logs';
+              // ล็อกเมนูที่ยังไม่เปิดใช้ (ยกเว้น manual, email, upload)
+              const isFuture = rep.id !== 'email_logs' && rep.id !== 'upload_logs' && rep.id !== 'system_manual';
               return (
-                <button key={rep.id} onClick={() => !isFuture && setActiveReport(rep.id)} disabled={isFuture} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm text-left ${isActive ? 'bg-slate-800 text-white shadow-md' : isFuture ? 'text-slate-400 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}>
-                  <IconComp size={18} className={isActive ? 'text-indigo-400' : ''} />
+                <button 
+                  key={rep.id} 
+                  onClick={() => !isFuture && setActiveReport(rep.id)} 
+                  disabled={isFuture} 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all text-sm text-left 
+                    ${isActive ? 'bg-slate-800 text-white shadow-md' : isFuture ? 'text-slate-400 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}
+                >
+                  <IconComp size={18} className={isActive ? (rep.id === 'system_manual' ? 'text-emerald-400' : 'text-indigo-400') : ''} />
                   <span className="flex-1">{rep.title}</span>
                 </button>
               );
@@ -1857,10 +1874,129 @@ const ReportsView = () => {
           </div>
         </div>
 
+        {/* พื้นที่แสดง Content ขวามือ */}
         <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden relative">
           
+          {/* ===================================== */}
+          {/* 🚀 1. หน้าคู่มือการใช้งาน & Flow (เมนูใหม่) */}
+          {/* ===================================== */}
+{/* ===================================== */}
+          {/* 🚀 1. หน้าคู่มือการใช้งานแบบละเอียด (Detailed Manual) */}
+          {/* ===================================== */}
+          {activeReport === 'system_manual' && (
+            <div className="flex flex-col h-full">
+              <div className="p-4 md:p-6 border-b border-slate-100 bg-emerald-50/30 flex justify-between items-center">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><BookOpen className="text-emerald-600" /> คู่มือการใช้งานแบบละเอียด (Standard Operating Procedure)</h3>
+                  <p className="text-sm text-slate-500 mt-1">ขั้นตอนการปฏิบัติงานสำหรับเจ้าหน้าที่จัดซื้อและคลังสินค้า</p>
+                </div>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8 bg-white">
+                
+                {/* 1. สรุป Flow การทำงานหลัก */}
+                <div className="mb-12">
+                  <h4 className="font-bold text-lg text-indigo-700 mb-4 border-l-4 border-indigo-500 pl-3">1. แผนผังวงจรการทำงาน (System Lifecycle)</h4>
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row items-center justify-around gap-4 text-center">
+                    <div className="flex flex-col items-center gap-2 w-32">
+                      <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-lg">1</div>
+                      <p className="text-xs font-bold">Import Stock</p>
+                      <p className="text-[10px] text-slate-500">อัปเดตสต็อก 2 ครั้ง/สัปดาห์</p>
+                    </div>
+                    <ArrowRight className="hidden md:block text-slate-300" />
+                    <div className="flex flex-col items-center gap-2 w-32">
+                      <div className="w-12 h-12 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold shadow-lg">2</div>
+                      <p className="text-xs font-bold">Auto Forecast</p>
+                      <p className="text-[10px] text-slate-500">ระบบคำนวณ Min/Max & วันสั่งของ</p>
+                    </div>
+                    <ArrowRight className="hidden md:block text-slate-300" />
+                    <div className="flex flex-col items-center gap-2 w-32">
+                      <div className="w-12 h-12 rounded-full bg-indigo-500 text-white flex items-center justify-center font-bold shadow-lg">3</div>
+                      <p className="text-xs font-bold">Notify Supplier</p>
+                      <p className="text-[10px] text-slate-500">ส่งเมลแจ้งเติมของ (PO/PR)</p>
+                    </div>
+                    <ArrowRight className="hidden md:block text-slate-300" />
+                    <div className="flex flex-col items-center gap-2 w-32">
+                      <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold shadow-lg">4</div>
+                      <p className="text-xs font-bold">Tracking</p>
+                      <p className="text-[10px] text-slate-500">ติดตามสถานะขนส่งจนถึงคลัง</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. รายละเอียดการใช้งานแยกตามเมนู */}
+                <div className="space-y-8">
+                  <h4 className="font-bold text-lg text-indigo-700 mb-4 border-l-4 border-indigo-500 pl-3">2. วิธีใช้งานและข้อควรระวัง (Operational Guide)</h4>
+                  
+                  {/* เมนู 1 */}
+                  <div className="group">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 bg-orange-100 text-orange-600 rounded-lg group-hover:bg-orange-500 group-hover:text-white transition-colors"><Package size={20}/></div>
+                      <h5 className="font-bold text-slate-800">หน้าจัดการสต็อก (Stock Mgt.)</h5>
+                    </div>
+                    <div className="ml-11 space-y-2 text-sm text-slate-600">
+                      <p>✅ <b>การนำเข้าไฟล์:</b> ไฟล์ Excel จาก ERP ต้องมีหัวตาราง (Header) ชื่อ: <code className="bg-slate-100 px-1 rounded text-red-500">Part No</code>, <code className="bg-slate-100 px-1 rounded text-red-500">Description</code>, และ <code className="bg-slate-100 px-1 rounded text-red-500">Available Qty</code></p>
+                      <p>✅ <b>ความถี่:</b> ควรอัปโหลดทุกวันอังคารและพฤหัสบดีเพื่อให้ข้อมูล Reorder Date แม่นยำ</p>
+                      <p className="text-amber-600 font-medium">⚠️ <b>ข้อควรระวัง:</b> หาก Available Qty ต่ำกว่า Min Stock ระบบจะส่งรายการไปที่หน้า Workflow ทันที</p>
+                    </div>
+                  </div>
+
+                  {/* เมนู 2 */}
+                  <div className="group">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-500 group-hover:text-white transition-colors"><GitMerge size={20}/></div>
+                      <h5 className="font-bold text-slate-800">หน้าแจ้งสั่งของ (Workflow)</h5>
+                    </div>
+                    <div className="ml-11 space-y-2 text-sm text-slate-600">
+                      <p>✅ <b>การส่งเมล:</b> ระบบจะรวมรายการที่ขาดแยกตามชื่อซัพพลายเออร์ ให้ตรวจสอบ Email ปลายทางก่อนกดปุ่ม</p>
+                      <p>✅ <b>สถานะ Sent:</b> เมื่อส่งแล้ว ปุ่มจะเปลี่ยนเป็น "ส่งซ้ำ" และรายการจะขึ้นป้ายสีส้มว่ารอตอบรับ</p>
+                      <p>✅ <b>การล็อคปุ่ม:</b> หากซัพพลายเออร์กดยืนยันแล้ว ปุ่มจะเปลี่ยนเป็นสีเทาและกดส่งไม่ได้อีก เพื่อป้องกันการส่งของซ้ำซ้อน</p>
+                    </div>
+                  </div>
+
+                  {/* เมนู 3 */}
+                  <div className="group">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg group-hover:bg-emerald-500 group-hover:text-white transition-colors"><Users size={20}/></div>
+                      <h5 className="font-bold text-slate-800">หน้าจัดการซัพพลายเออร์ (Supplier Mgt.)</h5>
+                    </div>
+                    <div className="ml-11 space-y-2 text-sm text-slate-600">
+                      <p>✅ <b>การตั้งค่า Min/Max:</b> ระบบจะคำนวณจากประวัติการเบิกใช้ 12 เดือนล่าสุด (Avg Weekly Usage × 2)</p>
+                      <p>✅ <b>Email:</b> ต้องระบุ Email ที่ถูกต้องเพื่อให้ระบบ Workflow ส่งข้อมูลถึงมือซัพพลายเออร์ได้</p>
+                    </div>
+                  </div>
+
+                  {/* เมนู 4 */}
+                  <div className="group">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 bg-cyan-100 text-cyan-600 rounded-lg group-hover:bg-cyan-500 group-hover:text-white transition-colors"><Truck size={20}/></div>
+                      <h5 className="font-bold text-slate-800">หน้าติดตามสถานะ (Tracking)</h5>
+                    </div>
+                    <div className="ml-11 space-y-2 text-sm text-slate-600">
+                      <p>✅ <b>Tracking ID:</b> จะถูกสร้างขึ้นอัตโนมัติทันทีที่ซัพพลายเออร์กดยืนยันรับทราบ</p>
+                      <p>✅ <b>การรับของ:</b> เมื่อสินค้าถึงโรงงาน ให้เจ้าหน้าที่คลังสินค้ากดปุ่ม "4. โรงงานรับสินค้า" เพื่อเป็นการจบใบงาน (Close Job)</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. ส่วนความช่วยเหลือ */}
+                <div className="mt-12 p-6 bg-blue-50 rounded-2xl border border-blue-100">
+                  <div className="flex items-center gap-3 text-blue-800 mb-2">
+                    <AlertCircle size={24} />
+                    <h5 className="font-bold">ต้องการความช่วยเหลือเพิ่มเติม?</h5>
+                  </div>
+                  <p className="text-sm text-blue-700">หากพบปัญหาการใช้งานระบบ หรือข้อมูลสต็อกไม่ตรงกับความเป็นจริง กรุณาติดต่อแผนก IT (เบอร์ภายใน 1234) หรือผู้ดูแลระบบ VMI</p>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* ===================================== */}
+          {/* 2. รายงาน: ประวัติการส่งอีเมล */}
+          {/* ===================================== */}
           {activeReport === 'email_logs' && (
-            <>
+            <div className="flex flex-col h-full">
               <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50">
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><History className="text-indigo-600" /> ประวัติการส่งแจ้งเตือน (Email Logs)</h3>
                 <p className="text-sm text-slate-500 mt-1">ประวัติการส่งใบสั่งของและสถานะการรับทราบจาก Supplier</p>
@@ -1902,11 +2038,14 @@ const ReportsView = () => {
                   </tbody>
                 </table>
               </div>
-            </>
+            </div>
           )}
 
+          {/* ===================================== */}
+          {/* 3. รายงาน: ประวัติการอัปโหลดไฟล์ Excel */}
+          {/* ===================================== */}
           {activeReport === 'upload_logs' && (
-            <>
+            <div className="flex flex-col h-full">
               <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50">
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><UploadCloud className="text-blue-600" /> ประวัติการนำเข้า ERP (Upload Logs)</h3>
                 <p className="text-sm text-slate-500 mt-1">ประวัติการอัปโหลดไฟล์ Excel เพื่ออัปเดตยอดสต็อกและจำนวนสินค้า</p>
@@ -1941,10 +2080,11 @@ const ReportsView = () => {
                   </tbody>
                 </table>
               </div>
-            </>
+            </div>
           )}
         </div>
 
+        {/* Modal ดูรายละเอียดอีเมล */}
         {viewingLogDetails && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[80vh] animate-slide-down">
@@ -2113,6 +2253,108 @@ const SettingsView = () => {
   );
 };
 
+// ==========================================
+// 📱 หน้าลงทะเบียน Line สำหรับ Supplier (LIFF)
+// ==========================================
+const LineRegisterView = () => {
+  const [profile, setProfile] = useState<any>(null);
+  const [vendorNo, setVendorNo] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [success, setSuccess] = useState(false);
+
+  // 🚀 ใส่ LIFF ID ที่ได้จาก Line Developers Console
+  const LIFF_ID = "2009118538-8SLn1atK"; // <-- แทนที่ด้วย LIFF ID ของคุณ
+
+  useEffect(() => {
+    const initLiff = async () => {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) {
+          liff.login();
+        } else {
+          const userProfile = await liff.getProfile();
+          setProfile(userProfile);
+        }
+      } catch (err) {
+        console.error("LIFF Init Error", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    initLiff();
+  }, []);
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!vendorNo || !fullName) return alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+
+    try {
+      // 1. ตรวจสอบว่ามี Vendor No นี้ในระบบจริงไหม
+      const q = query(collection(db, 'suppliers'), where('vendor_no', '==', vendorNo.trim()));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        alert("ไม่พบรหัสซัพพลายเออร์นี้ในระบบ กรุณาตรวจสอบรหัสอีกครั้ง");
+        return;
+      }
+
+      // 2. บันทึกลง Firebase Collection 'line_users'
+      await setDoc(doc(db, 'line_users', profile.userId), {
+        line_user_id: profile.userId,
+        line_username: profile.displayName,
+        line_picture: profile.pictureUrl,
+        full_name: fullName,
+        vendor_no: vendorNo.trim(),
+        registered_at: serverTimestamp()
+      });
+
+      setSuccess(true);
+    } catch (err) {
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+    }
+  };
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 font-bold">กำลังเชื่อมต่อ LINE...</div>;
+
+  if (success) return (
+    <div className="min-h-screen bg-emerald-50 flex flex-col items-center justify-center p-6 text-center">
+      <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center mb-4 shadow-lg shadow-emerald-200">
+        <CheckCircle size={48} />
+      </div>
+      <h1 className="text-2xl font-black text-slate-800 mb-2">ลงทะเบียนสำเร็จ!</h1>
+      <p className="text-slate-600 mb-8 font-medium">ข้อมูลของคุณถูกผูกกับระบบ VMI เรียบร้อยแล้ว</p>
+      <button onClick={() => liff.closeWindow()} className="w-full max-w-xs bg-slate-800 text-white font-bold py-4 rounded-2xl">ปิดหน้าต่าง</button>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col p-6 font-sans">
+      <div className="max-w-md mx-auto w-full bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden mt-8">
+        <div className="bg-indigo-600 p-8 text-center text-white">
+          <img src={profile?.pictureUrl} className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-white/30 shadow-lg" alt="Profile" />
+          <h2 className="text-xl font-bold">สวัสดีคุณ {profile?.displayName}</h2>
+          <p className="text-indigo-100 text-sm mt-1 opacity-80">กรุณาผูกข้อมูลเพื่อรับรายงาน VMI</p>
+        </div>
+        
+        <form onSubmit={handleRegister} className="p-8 space-y-6">
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">รหัสซัพพลายเออร์ (Vendor No)</label>
+            <input required type="text" value={vendorNo} onChange={e => setVendorNo(e.target.value)} className="w-full border-2 border-slate-100 p-4 rounded-2xl focus:border-indigo-500 outline-none transition-all font-mono font-bold text-lg" placeholder="ระบุรหัส เช่น V001" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">ชื่อ-นามสกุล ของท่าน</label>
+            <input required type="text" value={fullName} onChange={e => setFullName(e.target.value)} className="w-full border-2 border-slate-100 p-4 rounded-2xl focus:border-indigo-500 outline-none transition-all font-bold" placeholder="ระบุชื่อเพื่อบันทึกข้อมูล" />
+          </div>
+          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-indigo-200 transition-all active:scale-95 text-lg">
+            ลงทะเบียนเข้าใช้งาน
+          </button>
+        </form>
+      </div>
+      <p className="text-center text-slate-400 text-xs mt-8">VMI LINE System v1.0</p>
+    </div>
+  );
+};
 // ==========================================
 // 4. Main Application Router
 // ==========================================
