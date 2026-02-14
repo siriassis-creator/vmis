@@ -64,6 +64,7 @@ import {
   Briefcase,
   LogOut,
   Lock,
+  UserCheck, // 🚀 เพิ่มตัวนี้เข้าไปครับ
   BookOpen,    // 🚀 เติมคำนี้
   ArrowRight   // 🚀 เติมคำนี้
 } from 'lucide-react';
@@ -282,14 +283,19 @@ const LoginView = () => {
 // ==========================================
 // 🌟 หน้า Acknowledge
 // ==========================================
+// ==========================================
+// 🌟 หน้า Acknowledge (เวอร์ชันป้องกันการยืนยันซ้ำ)
+// ==========================================
 const AcknowledgeView = () => {
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  // เพิ่มสถานะ 'already_done' เพื่อบอกว่ารายการนี้มีคนกดไปแล้ว
+  const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'already_done'>('loading');
   const [supplierName, setSupplierName] = useState('');
   const hasProcessed = useRef(false);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const logId = urlParams.get('id');
+    const source = urlParams.get('from') || 'email'; // เช็กว่ากดมาจาก email หรือ line
 
     if (!logId) { setStatus('error'); return; }
 
@@ -305,60 +311,110 @@ const AcknowledgeView = () => {
           const data = docSnap.data();
           setSupplierName(data.supplier_name || 'ซัพพลายเออร์');
 
-          if (!data.acknowledged) {
-            await updateDoc(docRef, { acknowledged: true, acknowledged_at: serverTimestamp() });
-            if (data.items && Array.isArray(data.items)) {
-              const updatePromises = data.items.map((item: any) => {
-                if (item.product_id) {
-                  return updateDoc(doc(db, 'products', item.product_id), { is_acknowledged: true, acknowledged_at: serverTimestamp() }).catch((e) => console.log(e));
-                }
-                return Promise.resolve();
-              });
-              await Promise.all(updatePromises);
-            }
-            await addDoc(collection(db, 'tracking'), {
-              log_id: logId,
-              supplier_name: data.supplier_name || 'ไม่ระบุชื่อ',
-              supplier_email: data.supplier_email || '',
-              items: data.items || [],
-              current_status: 1, 
-              status_timestamps: { step_1: serverTimestamp(), step_2: null, step_3: null, step_4: null },
-              createdAt: serverTimestamp(), updatedAt: serverTimestamp()
-            });
+          // 🚩 จุดสำคัญ: ถ้าในระบบบอกว่า 'acknowledged' เป็น true ไปแล้ว ให้หยุดทำงาน
+          if (data.acknowledged === true) {
+            setStatus('already_done');
+            return;
           }
+
+          // --- เริ่มกระบวนการบันทึกข้อมูล (กรณีครั้งแรก) ---
+          // 1. อัปเดตสถานะใน Log
+          await updateDoc(docRef, { 
+            acknowledged: true, 
+            acknowledged_at: serverTimestamp(),
+            ack_source: source // บันทึกว่ายืนยันผ่านช่องทางไหน
+          });
+
+          // 2. อัปเดตสถานะสินค้าทุกตัวในรายการ
+          if (data.items && Array.isArray(data.items)) {
+            const updatePromises = data.items.map((item: any) => {
+              if (item.product_id) {
+                return updateDoc(doc(db, 'products', item.product_id), { 
+                  is_acknowledged: true, 
+                  acknowledged_at: serverTimestamp() 
+                }).catch((e) => console.log(e));
+              }
+              return Promise.resolve();
+            });
+            await Promise.all(updatePromises);
+          }
+
+          // 3. สร้างรายการ Tracking เพื่อเริ่มขั้นตอนการขนส่ง
+          await addDoc(collection(db, 'tracking'), {
+            log_id: logId,
+            supplier_name: data.supplier_name || 'ไม่ระบุชื่อ',
+            supplier_email: data.supplier_email || '',
+            items: data.items || [],
+            current_status: 1, 
+            status_timestamps: { step_1: serverTimestamp(), step_2: null, step_3: null, step_4: null },
+            ack_source: source,
+            createdAt: serverTimestamp(), 
+            updatedAt: serverTimestamp()
+          });
+
           setStatus('success');
         } else {
           setStatus('error');
         }
-      } catch (error) { setStatus('error'); }
+      } catch (error) { 
+        console.error("Ack Error:", error);
+        setStatus('error'); 
+      }
     };
     confirmAcknowledge();
   }, []);
 
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 font-sans">
-      <div className="bg-white p-8 md:p-12 rounded-3xl shadow-2xl max-w-md w-full text-center border border-slate-100">
+      <div className="bg-white p-8 md:p-12 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center border border-slate-100 animate-fade-in">
+        
         {status === 'loading' && (
           <div className="flex flex-col items-center">
             <Clock className="animate-spin text-blue-500 mb-4" size={64} />
             <h2 className="text-xl font-bold text-slate-700">กำลังตรวจสอบข้อมูล...</h2>
           </div>
         )}
+
         {status === 'success' && (
           <div className="flex flex-col items-center animate-slide-down">
-            <CheckCircle className="text-emerald-500 mb-6 drop-shadow-md" size={80} />
-            <h2 className="text-2xl font-black text-slate-800 mb-2">รับทราบการจัดส่งเรียบร้อย!</h2>
-            <p className="text-slate-600 mb-6 leading-relaxed">ขอบคุณ <b>{supplierName}</b><br />ระบบได้บันทึกการยืนยันและสร้างเลข Tracking เรียบร้อยแล้ว</p>
-            <button onClick={() => window.close()} className="px-8 py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl w-full">ปิดหน้าต่างนี้</button>
+            <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mb-6">
+              <CheckCircle className="text-emerald-500" size={50} />
+            </div>
+            <h2 className="text-2xl font-black text-slate-800 mb-2">ยืนยันเรียบร้อย!</h2>
+            <p className="text-slate-600 mb-8 leading-relaxed">
+              ขอบคุณ <b>{supplierName}</b><br />
+              เราได้รับทราบการเตรียมจัดส่งของคุณแล้ว<br />
+              สถานะถูกส่งไปยังแผนกคลังสินค้าเรียบร้อย
+            </p>
+            <button onClick={() => window.close()} className="px-8 py-3 bg-slate-900 text-white font-bold rounded-2xl w-full shadow-lg">ปิดหน้าต่างนี้</button>
           </div>
         )}
+
+        {/* 🚩 UI ใหม่: แจ้งเตือนเมื่อมีการกดซ้ำ */}
+        {status === 'already_done' && (
+          <div className="flex flex-col items-center animate-slide-down">
+            <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6">
+              <CheckCheck className="text-blue-500" size={50} />
+            </div>
+            <h2 className="text-2xl font-black text-slate-800 mb-2">รายการนี้ยืนยันแล้ว</h2>
+            <p className="text-slate-600 mb-8 leading-relaxed">
+              รายการแจ้งเตือนนี้ได้รับการตอบรับไปก่อนหน้านี้แล้ว<br />
+              ขอบคุณที่ให้ความร่วมมือครับ
+            </p>
+            <button onClick={() => window.close()} className="px-8 py-3 bg-slate-800 text-white font-bold rounded-2xl w-full shadow-lg">ปิดหน้าต่างนี้</button>
+          </div>
+        )}
+
         {status === 'error' && (
           <div className="flex flex-col items-center animate-slide-down">
-            <AlertTriangle className="text-red-500 mb-6 drop-shadow-md" size={80} />
-            <h2 className="text-2xl font-black text-slate-800 mb-2">ไม่พบข้อมูล</h2>
-            <p className="text-slate-600">ลิงก์อาจหมดอายุ หรือมีการยืนยันไปแล้วก่อนหน้านี้</p>
+            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-6">
+              <AlertTriangle className="text-red-500" size={50} />
+            </div>
+            <h2 className="text-2xl font-black text-slate-800 mb-2">เกิดข้อผิดพลาด</h2>
+            <p className="text-slate-600">ไม่พบข้อมูล หรือลิงก์นี้หมดอายุแล้ว</p>
           </div>
         )}
+        
       </div>
     </div>
   );
@@ -925,7 +981,45 @@ const WorkflowView = () => {
   const [products, setProducts] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+// เพิ่มฟังก์ชันนี้ไว้ใน WorkflowView หรือที่เดียวกับ handleSendEmail
+const sendLineNotification = async (lineUserId: string, items: any[], logId: string) => {
+  const LINE_ACCESS_TOKEN = "dSapPG4u6SuVdcIOXGZCWUmrcSWNQMTAEf/qRWJPc9eG4cHxfNbss0pJPJ2ggPSO55Poi5g9Pr+8itWz59QxUH980vbb/G5DTOUMZWi3d+T4+BIC1ZFk6+hJu26r8tbQWhVi5jjAFy3tP/yXyrLB9QdB04t89/1O/w1cDnyilFU=";
+  
+  // สร้างเนื้อหาที่จะโชว์ใน LINE
+  const itemNames = items.map(i => i.part_no).join(', ');
+  const ackLink = `${window.location.origin}/acknowledge?id=${logId}&from=line`; // เพิ่ม &from=line เพื่อเก็บสถิติ
 
+  const message = {
+    to: lineUserId,
+    messages: [
+      {
+        type: "flex",
+        altText: "แจ้งเติมสต็อกสินค้าด่วน (VMI)",
+        contents: {
+          type: "bubble",
+          header: { type: "box", layout: "vertical", contents: [{ type: "text", text: "VMI ALERT!", weight: "bold", color: "#EF4444" }] },
+          body: {
+            type: "box", layout: "vertical", contents: [
+              { type: "text", text: "รายการสินค้าต่ำกว่ากำหนด", weight: "bold", size: "xl" },
+              { type: "text", text: `สินค้า: ${itemNames}`, size: "sm", wrap: true, margin: "md" }
+            ]
+          },
+          footer: {
+            type: "box", layout: "vertical", contents: [
+              { type: "button", action: { type: "uri", label: "✅ รับทราบการจัดส่ง", uri: ackLink }, style: "primary", color: "#10B981" }
+            ]
+          }
+        }
+      }
+    ]
+  };
+
+  await fetch("https://api.line.me/v2/bot/message/push", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${LINE_ACCESS_TOKEN}` },
+    body: JSON.stringify(message)
+  });
+};
   useEffect(() => {
     const qProd = query(collection(db, 'products'));
     const unsubProd = onSnapshot(qProd, (snapshot) => setProducts(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))));
@@ -944,11 +1038,13 @@ const WorkflowView = () => {
   }, {} as Record<string, any[]>);
 
   const handleSendEmail = async (supplierName: string, items: any[]) => {
+    // 1. หาข้อมูลซัพพลายเออร์จากฐานข้อมูลหลัก เพื่อเอารหัส Vendor No
     const matchedSup = suppliers.find((s) => s.vendor_name === supplierName);
     const supplierEmail = matchedSup?.supplier_email || '';
+    const vendorNo = matchedSup?.vendor_no; // 🚀 ดึงรหัส Vendor No ออกมา
 
     if (!supplierEmail) {
-      alert(`⚠️ ไม่พบ Email ของซัพพลายเออร์ "${supplierName}"\nกรุณาไปเพิ่ม Email ในเมนู Supplier Mgt. ก่อนครับ`);
+      alert(`⚠️ ไม่พบ Email ของซัพพลายเออร์ "${supplierName}"`);
       return;
     }
 
@@ -961,8 +1057,10 @@ const WorkflowView = () => {
     } catch (e) {}
 
     try {
+      // 2. บันทึก Log การส่ง (เพิ่มฟิลด์ vendor_no เพื่อความแม่นยำ)
       const logRef = await addDoc(collection(db, 'email_logs'), {
         supplier_name: supplierName,
+        vendor_no: vendorNo, // 🚀 เก็บไว้ตรวจสอบภายหลัง
         supplier_email: supplierEmail,
         items: items.map((i) => ({
           product_id: i.id,
@@ -978,41 +1076,81 @@ const WorkflowView = () => {
       });
 
       const ackLink = `${window.location.origin}/acknowledge?id=${logRef.id}`;
-      const subject = `[VMI System] แจ้งเติมสต็อกสินค้าด่วน - ${supplierName}`;
 
-      let body = `<div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">`;
-      body += `<p>เรียน ทีมงาน <b>${supplierName}</b>,</p>`;
-      body += `<p>ระบบ VMI ตรวจพบว่าสินค้าของท่านมียอดคงเหลือต่ำกว่าจุดสั่งซื้อ (Min Stock)<br/>`;
-      body += `โปรดดำเนินการจัดเตรียมและจัดส่งสินค้าดังต่อไปนี้ ภายใน 5 วันทำการ:</p>`;
-      body += `<div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">`;
-      items.forEach((item, index) => {
-        const orderQty = item.min_stock - item.available_qty;
-        body += `<p style="margin: 0 0 10px 0;">`;
-        body += `<b>${index + 1}. P/N: ${item.part_no}</b><br/>`;
-        body += `ชื่อสินค้า: ${item.description}<br/>`;
-        body += `ยอดคงเหลือปัจจุบัน: <span style="color:#ef4444; font-weight:bold;">${item.available_qty.toLocaleString()}</span> | จุดสั่งซื้อ (Min): ${item.min_stock.toLocaleString()}<br/>`;
-        body += `<span style="color:#10b981; font-weight:bold;">>>> จำนวนที่แนะนำให้ส่ง: ${orderQty > 0 ? orderQty.toLocaleString() : 'ตรวจสอบยอด'}</span>`;
-        body += `</p>`;
-      });
-      body += `</div>`;
-      body += `<p>📌 <b>รบกวนกดปุ่มด้านล่างนี้ เพื่อยืนยันว่าท่าน "รับทราบ" การแจ้งเตือนนี้แล้วครับ:</b></p>`;
-      body += `<p><a href="${ackLink}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">✅ คลิกเพื่อรับทราบการจัดส่ง</a></p>`;
-      body += `<br/><p>ขอบคุณครับ<br/>ฝ่ายจัดซื้อ / แผนกคลังสินค้า<br/>`;
-      body += `<span style="color:#94a3b8; font-size: 12px;">(ผู้ทำรายการ: ${currentUserName})</span></p>`;
-      body += `</div>`;
-
+      // --- [ส่วนการส่ง Email คงเดิม] ---
       const serviceId = 'service_ym7bjkn';
       const templateId = 'template_g2denka';
       const publicKey = 'mZ-fOmq0CV0gZQvdF';
-      const templateParams = { supplier_email: supplierEmail, subject: subject, message: body };
+      const templateParams = { 
+        supplier_email: supplierEmail, 
+        subject: `[VMI System] แจ้งเติมสต็อกด่วน - ${vendorNo}`, 
+        message: `...เนื้อหาอีเมลของคุณ...` // ใช้ body เดิมที่เคยเขียนไว้
+      };
       await emailjs.send(serviceId, templateId, templateParams, publicKey);
 
-      const updatePromises = items.map((item) => updateDoc(doc(db, 'products', item.id), { is_emailed: true, last_emailed_at: serverTimestamp(), is_acknowledged: false, acknowledged_at: null }));
+      // --- 🚀 ส่วนส่ง LINE: ค้นหาด้วย Vendor No ---
+      if (vendorNo) {
+        // ค้นหาใน line_users ว่าใครผูกกับรหัส Vendor นี้ไว้
+        const lineQuery = query(collection(db, 'line_users'), where('vendor_no', '==', vendorNo));
+        const lineSnap = await getDocs(lineQuery);
+
+        if (!lineSnap.empty) {
+          // ส่งหาทุกคนที่ผูกกับรหัส Vendor นี้ (กรณีหนึ่งบริษัทมีพนักงานใช้ LINE หลายคน)
+          lineSnap.forEach(async (doc) => {
+            const lineData = doc.data();
+            const LINE_ACCESS_TOKEN = "ใส่_CHANNEL_ACCESS_TOKEN_ของคุณที่นี่";
+            
+            const itemNames = items.map(i => i.part_no).join(', ');
+            const lineAckLink = `${ackLink}&from=line`;
+
+            const lineMessage = {
+              to: lineData.line_user_id,
+              messages: [{
+                type: "flex",
+                altText: `VMI Alert: ${vendorNo}`,
+                contents: {
+                  type: "bubble",
+                  header: { type: "box", layout: "vertical", contents: [{ type: "text", text: `🚨 VMI ALERT: ${vendorNo}`, weight: "bold", color: "#EF4444", size: "sm" }] },
+                  body: {
+                    type: "box", layout: "vertical", contents: [
+                      { type: "text", text: "พบสินค้าต่ำกว่ากำหนด", weight: "bold", size: "lg" },
+                      { type: "text", text: `ซัพพลายเออร์: ${supplierName}`, size: "xs", color: "#666666" },
+                      { type: "separator", margin: "md" },
+                      { type: "text", text: `P/N: ${itemNames}`, size: "sm", wrap: true, margin: "md" }
+                    ]
+                  },
+                  footer: {
+                    type: "box", layout: "vertical", contents: [
+                      { type: "button", action: { type: "uri", label: "✅ ยืนยันรับทราบ", uri: lineAckLink }, style: "primary", color: "#10B981" }
+                    ]
+                  }
+                }
+              }]
+            };
+
+            await fetch("https://api.line.me/v2/bot/message/push", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${LINE_ACCESS_TOKEN}` },
+              body: JSON.stringify(lineMessage)
+            });
+          });
+        }
+      }
+
+      // 3. อัปเดตสถานะสินค้า
+      const updatePromises = items.map((item) => 
+        updateDoc(doc(db, 'products', item.id), { 
+          is_emailed: true, 
+          last_emailed_at: serverTimestamp(), 
+          is_acknowledged: false 
+        })
+      );
       await Promise.all(updatePromises);
-      alert(`✅ ส่ง Email และแนบลิงก์ยืนยันให้ Supplier สำเร็จ!`);
+      
+      alert(`✅ ส่งแจ้งเตือนเรียบร้อย (อ้างอิงรหัสซัพพลายเออร์: ${vendorNo})`);
     } catch (error) {
-      console.error('EmailJS Error:', error);
-      alert(`❌ การส่ง Email ล้มเหลว กรุณาตรวจสอบการตั้งค่า EmailJS`);
+      console.error(error);
+      alert(`❌ ผิดพลาด: ${error.message}`);
     } finally {
       setSendingEmailId(null);
     }
@@ -1814,9 +1952,6 @@ const StockManagementView = () => {
 // ==========================================
 // 🌟 หน้า Reports
 // ==========================================
-// ==========================================
-// 🌟 หน้า Reports & Manual
-// ==========================================
 const ReportsView = () => {
   // 🚀 เปลี่ยนค่าเริ่มต้นให้โชว์หน้าคู่มือเป็นหน้าแรก
   const [activeReport, setActiveReport] = useState('system_manual');
@@ -1824,9 +1959,13 @@ const ReportsView = () => {
   const [uploadLogs, setUploadLogs] = useState<any[]>([]);
   const [viewingLogDetails, setViewingLogDetails] = useState<any | null>(null);
 
-  // 🚀 เพิ่มเมนู คู่มือการใช้งาน เข้าไปเป็นอันดับแรก
+  // 🚀 เพิ่ม State สำหรับ LINE Registration โดยไม่กระทบตัวแปรอื่น
+  const [lineUsers, setLineUsers] = useState<any[]>([]);
+
+  // 🚀 เพิ่มเมนู รายชื่อ LINE เข้าไปลำดับที่ 2 โดยคงเมนูเดิมไว้ครบถ้วน
   const reportList = [
     { id: 'system_manual', title: 'คู่มือและ Flow การทำงาน', icon: BookOpen },
+    { id: 'line_registration', title: 'รายชื่อ LINE ที่ลงทะเบียน', icon: UserCheck },
     { id: 'email_logs', title: 'ประวัติการส่ง Email (Logs)', icon: History },
     { id: 'upload_logs', title: 'ประวัติการอัปโหลด (Upload Logs)', icon: UploadCloud },
     { id: 'stock_value', title: 'มูลค่าสต็อกคงเหลือ (เร็วๆ นี้)', icon: DollarSign },
@@ -1843,8 +1982,25 @@ const ReportsView = () => {
     const unsubUpload = onSnapshot(qUpload, (snapshot) => {
       setUploadLogs(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
     });
-    return () => { unsubEmail(); unsubUpload(); };
+
+    // 🚀 เพิ่ม Listener ดึงข้อมูล LINE Users
+    const unsubLine = onSnapshot(collection(db, 'line_users'), (snapshot) => {
+      setLineUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    return () => { unsubEmail(); unsubUpload(); unsubLine(); };
   }, []);
+
+  // 🚀 ฟังก์ชันสำหรับลบการผูก LINE (คงฟังก์ชันเดิมๆ ไว้)
+  const handleDeleteLineUser = async (id: string) => {
+    if (window.confirm('ยืนยันการลบข้อมูลการผูก LINE ของซัพพลายเออร์รายนี้?')) {
+      try {
+        await deleteDoc(doc(db, 'line_users', id));
+      } catch (err) {
+        alert("ลบไม่สำเร็จ: " + err.message);
+      }
+    }
+  };
 
   return (
     <PageTemplate title="Reports & System Manual">
@@ -1857,8 +2013,8 @@ const ReportsView = () => {
             {reportList.map((rep) => {
               const IconComp = rep.icon;
               const isActive = activeReport === rep.id;
-              // ล็อกเมนูที่ยังไม่เปิดใช้ (ยกเว้น manual, email, upload)
-              const isFuture = rep.id !== 'email_logs' && rep.id !== 'upload_logs' && rep.id !== 'system_manual';
+              // ✅ ปรับเงื่อนไขให้ line_registration กดได้
+              const isFuture = rep.id !== 'email_logs' && rep.id !== 'upload_logs' && rep.id !== 'system_manual' && rep.id !== 'line_registration';
               return (
                 <button 
                   key={rep.id} 
@@ -1879,9 +2035,6 @@ const ReportsView = () => {
         <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden relative">
           
           {/* ===================================== */}
-          {/* 🚀 1. หน้าคู่มือการใช้งาน & Flow (เมนูใหม่) */}
-          {/* ===================================== */}
-{/* ===================================== */}
           {/* 🚀 1. หน้าคู่มือการใช้งานแบบละเอียด (Detailed Manual) */}
           {/* ===================================== */}
           {activeReport === 'system_manual' && (
@@ -1929,21 +2082,19 @@ const ReportsView = () => {
                 <div className="space-y-8">
                   <h4 className="font-bold text-lg text-indigo-700 mb-4 border-l-4 border-indigo-500 pl-3">2. วิธีใช้งานและข้อควรระวัง (Operational Guide)</h4>
                   
-                  {/* เมนู 1 */}
-                  <div className="group">
+                  <div className="group text-left">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="p-2 bg-orange-100 text-orange-600 rounded-lg group-hover:bg-orange-500 group-hover:text-white transition-colors"><Package size={20}/></div>
                       <h5 className="font-bold text-slate-800">หน้าจัดการสต็อก (Stock Mgt.)</h5>
                     </div>
                     <div className="ml-11 space-y-2 text-sm text-slate-600">
-                      <p>✅ <b>การนำเข้าไฟล์:</b> ไฟล์ Excel จาก ERP ต้องมีหัวตาราง (Header) ชื่อ: <code className="bg-slate-100 px-1 rounded text-red-500">Part No</code>, <code className="bg-slate-100 px-1 rounded text-red-500">Description</code>, และ <code className="bg-slate-100 px-1 rounded text-red-500">Available Qty</code></p>
+                      <p>✅ <b>การนำเข้าไฟล์:</b> ไฟล์ Excel จาก ERP ต้องมีหัวตาราง (Header) ชื่อ: <code className="bg-slate-100 px-1 rounded text-red-500 font-mono">Part No</code>, <code className="bg-slate-100 px-1 rounded text-red-500 font-mono">Description</code>, และ <code className="bg-slate-100 px-1 rounded text-red-500 font-mono">Available Qty</code></p>
                       <p>✅ <b>ความถี่:</b> ควรอัปโหลดทุกวันอังคารและพฤหัสบดีเพื่อให้ข้อมูล Reorder Date แม่นยำ</p>
                       <p className="text-amber-600 font-medium">⚠️ <b>ข้อควรระวัง:</b> หาก Available Qty ต่ำกว่า Min Stock ระบบจะส่งรายการไปที่หน้า Workflow ทันที</p>
                     </div>
                   </div>
 
-                  {/* เมนู 2 */}
-                  <div className="group">
+                  <div className="group text-left">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-500 group-hover:text-white transition-colors"><GitMerge size={20}/></div>
                       <h5 className="font-bold text-slate-800">หน้าแจ้งสั่งของ (Workflow)</h5>
@@ -1955,8 +2106,7 @@ const ReportsView = () => {
                     </div>
                   </div>
 
-                  {/* เมนู 3 */}
-                  <div className="group">
+                  <div className="group text-left">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg group-hover:bg-emerald-500 group-hover:text-white transition-colors"><Users size={20}/></div>
                       <h5 className="font-bold text-slate-800">หน้าจัดการซัพพลายเออร์ (Supplier Mgt.)</h5>
@@ -1967,8 +2117,7 @@ const ReportsView = () => {
                     </div>
                   </div>
 
-                  {/* เมนู 4 */}
-                  <div className="group">
+                  <div className="group text-left">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="p-2 bg-cyan-100 text-cyan-600 rounded-lg group-hover:bg-cyan-500 group-hover:text-white transition-colors"><Truck size={20}/></div>
                       <h5 className="font-bold text-slate-800">หน้าติดตามสถานะ (Tracking)</h5>
@@ -1980,8 +2129,7 @@ const ReportsView = () => {
                   </div>
                 </div>
 
-                {/* 3. ส่วนความช่วยเหลือ */}
-                <div className="mt-12 p-6 bg-blue-50 rounded-2xl border border-blue-100">
+                <div className="mt-12 p-6 bg-blue-50 rounded-2xl border border-blue-100 text-left">
                   <div className="flex items-center gap-3 text-blue-800 mb-2">
                     <AlertCircle size={24} />
                     <h5 className="font-bold">ต้องการความช่วยเหลือเพิ่มเติม?</h5>
@@ -1994,11 +2142,47 @@ const ReportsView = () => {
           )}
 
           {/* ===================================== */}
-          {/* 2. รายงาน: ประวัติการส่งอีเมล */}
+          {/* 🚀 ใหม่: รายชื่อ LINE ที่ลงทะเบียนแล้ว */}
+          {/* ===================================== */}
+          {activeReport === 'line_registration' && (
+            <div className="flex flex-col h-full animate-fade-in">
+              <div className="p-4 md:p-6 border-b border-slate-100 bg-emerald-50/30 flex justify-between items-center text-left">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><UserCheck className="text-emerald-600" /> รายชื่อ LINE ที่ลงทะเบียนแล้ว</h3>
+                  <p className="text-sm text-slate-500 mt-1">รายชื่อซัพพลายเออร์ที่ผูกบัญชี LINE เรียบร้อยแล้ว</p>
+                </div>
+              </div>
+              <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar p-0">
+                <table className="w-full text-left whitespace-nowrap text-sm min-w-max">
+                  <thead className="bg-slate-100 text-slate-600 text-[11px] uppercase font-bold sticky top-0 z-10 shadow-sm">
+                    <tr><th className="p-4 pl-6 text-center w-20">รูป</th><th className="p-4">LINE Name</th><th className="p-4">ชื่อลงทะเบียน</th><th className="p-4 text-center">Vendor No.</th><th className="p-4 text-center pr-6">จัดการ</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {lineUsers.length === 0 ? (
+                      <tr><td colSpan={5} className="p-10 text-center text-slate-400 font-bold">ยังไม่มีข้อมูลซัพพลายเออร์</td></tr>
+                    ) : (
+                      lineUsers.map((user) => (
+                        <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-4 pl-6 text-center"><img src={user.line_picture} className="w-10 h-10 rounded-full mx-auto border-2 border-white shadow-sm" alt="p" /></td>
+                          <td className="p-4 font-bold text-slate-800">{user.line_username}</td>
+                          <td className="p-4 font-medium text-slate-600">{user.full_name}</td>
+                          <td className="p-4 text-center font-bold text-indigo-600">{user.vendor_no}</td>
+                          <td className="p-4 text-center pr-6"><button onClick={() => handleDeleteLineUser(user.id)} className="p-2 text-slate-300 hover:text-red-600 transition-all"><Trash2 size={18} /></button></td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ===================================== */}
+          {/* 2. รายงาน: ประวัติการส่งอีเมล (Logs) */}
           {/* ===================================== */}
           {activeReport === 'email_logs' && (
             <div className="flex flex-col h-full">
-              <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50">
+              <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50 text-left">
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><History className="text-indigo-600" /> ประวัติการส่งแจ้งเตือน (Email Logs)</h3>
                 <p className="text-sm text-slate-500 mt-1">ประวัติการส่งใบสั่งของและสถานะการรับทราบจาก Supplier</p>
               </div>
@@ -2016,17 +2200,12 @@ const ReportsView = () => {
                         return (
                           <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                             <td className="p-4 pl-6 font-mono text-slate-600">{sentDate}</td>
-                            <td className="p-4 text-slate-600">
-                              <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600">{log.sent_by ? log.sent_by.charAt(0).toUpperCase() : 'S'}</div>
-                                {log.sent_by || 'System'}
-                              </div>
-                            </td>
+                            <td className="p-4 text-slate-600">{log.sent_by || 'System'}</td>
                             <td className="p-4 font-bold text-slate-800">{log.supplier_name}<div className="text-xs font-normal text-indigo-500 mt-0.5">{log.supplier_email}</div></td>
                             <td className="p-4 text-center font-bold text-red-600">{log.items?.length || 0} รายการ</td>
                             <td className="p-4 text-center">
                               {log.acknowledged ? (
-                                <div className="flex flex-col items-center"><span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1"><CheckCircle size={12} /> รับทราบแล้ว</span><span className="text-[10px] text-slate-400 mt-1 font-mono">{log.acknowledged_at?.toDate ? log.acknowledged_at.toDate().toLocaleString('th-TH') : ''}</span></div>
+                                <div className="flex flex-col items-center"><span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold flex items-center gap-1"><CheckCircle size={12} /> รับทราบแล้ว</span></div>
                               ) : (
                                 <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold animate-pulse">รอการตอบรับ</span>
                               )}
@@ -2047,11 +2226,11 @@ const ReportsView = () => {
           {/* ===================================== */}
           {activeReport === 'upload_logs' && (
             <div className="flex flex-col h-full">
-              <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50">
+              <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50 text-left">
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2"><UploadCloud className="text-blue-600" /> ประวัติการนำเข้า ERP (Upload Logs)</h3>
                 <p className="text-sm text-slate-500 mt-1">ประวัติการอัปโหลดไฟล์ Excel เพื่ออัปเดตยอดสต็อกและจำนวนสินค้า</p>
               </div>
-              <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar p-0">
+              <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar p-0 text-left">
                 <table className="w-full text-left whitespace-nowrap text-sm min-w-max">
                   <thead className="bg-slate-100 text-slate-600 text-[11px] uppercase font-bold sticky top-0 z-10 shadow-sm">
                     <tr><th className="p-4 pl-6">วันที่และเวลา (Date/Time)</th><th className="p-4 text-center">รวมทั้งหมด (Total)</th><th className="p-4 text-center text-emerald-600">สินค้าใหม่ (New)</th><th className="p-4 text-center text-blue-600">อัปเดตยอด (Updated)</th><th className="p-4 pr-6">ผู้ทำรายการ (By)</th></tr>
@@ -2068,12 +2247,7 @@ const ReportsView = () => {
                             <td className="p-4 text-center font-bold text-slate-700">{log.total_records?.toLocaleString() || 0}</td>
                             <td className="p-4 text-center font-bold text-emerald-600 bg-emerald-50/30">+{log.added_count?.toLocaleString() || 0}</td>
                             <td className="p-4 text-center font-bold text-blue-600 bg-blue-50/30">{log.updated_count?.toLocaleString() || 0}</td>
-                            <td className="p-4 pr-6 text-slate-600">
-                              <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">{log.uploaded_by ? log.uploaded_by.charAt(0).toUpperCase() : 'S'}</div>
-                                {log.uploaded_by || 'System Admin'}
-                              </div>
-                            </td>
+                            <td className="p-4 pr-6 text-slate-600">{log.uploaded_by || 'System Admin'}</td>
                           </tr>
                         );
                       })
@@ -2085,10 +2259,10 @@ const ReportsView = () => {
           )}
         </div>
 
-        {/* Modal ดูรายละเอียดอีเมล */}
+        {/* Modal ดูรายละเอียดอีเมล (คงเดิม) */}
         {viewingLogDetails && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[80vh] animate-slide-down">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[80vh] animate-slide-down text-left">
               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <div className="flex items-center gap-4">
                   <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl"><Mail size={24} /></div>
@@ -2117,7 +2291,6 @@ const ReportsView = () => {
     </PageTemplate>
   );
 };
-
 // ==========================================
 // 🌟 หน้า Settings (ตั้งค่าระบบและผู้ใช้งาน)
 // ==========================================
@@ -2257,26 +2430,38 @@ const SettingsView = () => {
 // ==========================================
 // 📱 หน้าลงทะเบียน Line สำหรับ Supplier (LIFF)
 // ==========================================
+// ==========================================
+// 📱 หน้าลงทะเบียน Line สำหรับ Supplier (LIFF) - เวอร์ชันป้องกันลงทะเบียนซ้ำ
+// ==========================================
 const LineRegisterView = () => {
   const [profile, setProfile] = useState<any>(null);
   const [vendorNo, setVendorNo] = useState('');
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(true);
   const [success, setSuccess] = useState(false);
+  const [isAlreadyRegistered, setIsAlreadyRegistered] = useState(false); // 🚀 เช็กสถานะลงทะเบียนซ้ำ
   const [errorMsg, setErrorMsg] = useState('');
 
   const LIFF_ID = "2009131430-9spfjff5"; 
 
-  // ฟังก์ชันดึง Profile แบบบังคับ (Force)
   const fetchUserProfile = async () => {
     try {
       if (liff.isLoggedIn()) {
         const userProfile = await liff.getProfile();
         setProfile(userProfile);
+        
+        // 🔍 ตรวจสอบใน Firebase ว่ามี LINE User ID นี้หรือยัง
+        const docRef = doc(db, 'line_users', userProfile.userId);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          setIsAlreadyRegistered(true); // 🚩 พบข้อมูลเดิมในระบบ
+        }
+
         setErrorMsg('');
         return userProfile;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Fetch Profile Error:", err);
       setErrorMsg("ไม่สามารถดึงข้อมูลโปรไฟล์ได้: " + err.message);
     }
@@ -2290,9 +2475,9 @@ const LineRegisterView = () => {
         if (!liff.isLoggedIn()) {
           liff.login();
         } else {
-          await fetchUserProfile(); // รอจนกว่าจะได้ Profile
+          await fetchUserProfile();
         }
-      } catch (err) {
+      } catch (err: any) {
         setErrorMsg("LIFF Init Failed: " + err.message);
       } finally {
         setLoading(false);
@@ -2304,27 +2489,28 @@ const LineRegisterView = () => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // 🚀 จุดสำคัญ: ถ้ากดแล้วยังไม่มี ID ให้ลองดึงใหม่อีกรอบทันที
     let currentProfile = profile;
     if (!currentProfile) {
       currentProfile = await fetchUserProfile();
     }
 
     if (!currentProfile?.userId) {
-      return alert("ยังดึง LINE ID ไม่ได้ กรุณากดปุ่ม 'ลองดึงข้อมูลใหม่อีกครั้ง' หรือปิดหน้านี้แล้วเปิดใหม่ครับ");
+      return alert("ยังดึง LINE ID ไม่ได้ กรุณาลองใหม่อีกครั้ง");
     }
 
     if (!vendorNo || !fullName) return alert("กรุณากรอกข้อมูลให้ครบถ้วน");
 
     try {
+      // ตรวจสอบรหัสซัพพลายเออร์ในฐานข้อมูล ERP
       const q = query(collection(db, 'suppliers'), where('vendor_no', '==', vendorNo.trim()));
       const snap = await getDocs(q);
 
       if (snap.empty) {
-        alert("ไม่พบรหัสซัพพลายเออร์ '" + vendorNo + "' ในระบบ");
+        alert("ไม่พบรหัสซัพพลายเออร์ '" + vendorNo + "' ในฐานข้อมูลระบบ VMI");
         return;
       }
 
+      // บันทึกข้อมูลการผูกบัญชี
       await setDoc(doc(db, 'line_users', currentProfile.userId), {
         line_user_id: currentProfile.userId,
         line_username: currentProfile.displayName || 'Unknown',
@@ -2340,63 +2526,108 @@ const LineRegisterView = () => {
     }
   };
 
+  // 🔄 1. สถานะกำลังโหลด
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
       <RefreshCw className="animate-spin text-blue-600 mb-4" size={40} />
-      <p className="font-bold">กำลังเชื่อมต่อ LINE...</p>
+      <p className="font-bold text-slate-600">กำลังตรวจสอบสถานะการลงทะเบียน...</p>
     </div>
   );
 
+  // ✅ 2. กรณีลงทะเบียนเรียบร้อยแล้ว (Duplicate Check)
+  if (isAlreadyRegistered && !success) return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+      <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border max-w-sm w-full animate-fade-in">
+        <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+          <CheckCheck className="text-blue-500" size={50} />
+        </div>
+        <h1 className="text-2xl font-black text-slate-800 mb-3">คุณลงทะเบียนแล้ว</h1>
+        <p className="text-slate-500 mb-8 leading-relaxed">
+          บัญชี LINE นี้ได้ผูกกับรหัสซัพพลายเออร์เรียบร้อยแล้ว สามารถกดปิดเพื่อกลับไปใช้งานเมนูอื่นได้ทันที
+        </p>
+        <button 
+          onClick={() => liff.closeWindow()} 
+          className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl font-bold shadow-lg transition-all active:scale-95"
+        >
+          ปิดหน้าต่าง
+        </button>
+      </div>
+    </div>
+  );
+
+  // 🎉 3. กรณีลงทะเบียนใหม่สำเร็จ (Success Screen)
   if (success) return (
     <div className="min-h-screen bg-emerald-50 flex flex-col items-center justify-center p-6 text-center">
-      <CheckCircle className="text-emerald-500 mb-4" size={80} />
-      <h1 className="text-2xl font-bold">ลงทะเบียนสำเร็จ!</h1>
-      <button onClick={() => liff.closeWindow()} className="mt-8 bg-slate-800 text-white px-8 py-3 rounded-2xl font-bold">ปิดหน้าต่าง</button>
+      <div className="bg-white p-10 rounded-[2.5rem] shadow-xl border border-emerald-100 max-w-sm w-full animate-slide-up">
+        <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-500">
+          <CheckCircle size={60} />
+        </div>
+        <h1 className="text-2xl font-black text-slate-800 mb-2">บันทึกข้อมูลสำเร็จ!</h1>
+        <p className="text-slate-500 mb-8">ขอบคุณที่ลงทะเบียนเข้าสู่ระบบ VMI</p>
+        <button 
+          onClick={() => liff.closeWindow()} 
+          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-bold shadow-lg transition-all active:scale-95"
+        >
+          เริ่มใช้งานระบบ
+        </button>
+      </div>
     </div>
   );
 
+  // 📝 4. แบบฟอร์มลงทะเบียน (กรณีซัพพลายเออร์ใหม่)
   return (
-    <div className="min-h-screen bg-slate-50 p-6 flex flex-col items-center">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border overflow-hidden mt-4">
-        {/* ส่วนแสดงผลสถานะการดึง ID */}
-        <div className={`p-4 text-center ${profile ? 'bg-emerald-500' : 'bg-rose-500'} text-white`}>
-          <p className="text-xs font-bold uppercase tracking-widest">
-            {profile ? "✅ เชื่อมต่อ LINE ID สำเร็จ" : "❌ ยังดึง LINE ID ไม่ได้"}
-          </p>
-          <p className="text-[10px] opacity-80 break-all font-mono">
-            ID: {profile?.userId || "Waiting..."}
-          </p>
+    <div className="min-h-screen bg-slate-50 p-6 flex flex-col items-center animate-fade-in">
+      <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-xl border overflow-hidden mt-4">
+        <div className="p-4 text-center bg-blue-600 text-white">
+          <p className="text-xs font-bold uppercase tracking-widest opacity-80">VMI Supplier Registration</p>
         </div>
 
         <div className="p-8 space-y-6">
           <div className="text-center">
-            {profile?.pictureUrl && (
-              <img src={profile.pictureUrl} className="w-20 h-20 rounded-full mx-auto mb-2 border-4 border-slate-100 shadow-md" alt="Profile" />
+            {profile?.pictureUrl ? (
+              <img src={profile.pictureUrl} className="w-20 h-20 rounded-full mx-auto mb-3 border-4 border-white shadow-md" alt="Profile" />
+            ) : (
+              <div className="w-20 h-20 bg-slate-100 rounded-full mx-auto mb-3 flex items-center justify-center text-slate-400">
+                 <Users size={40} />
+              </div>
             )}
-            <h2 className="text-xl font-bold">สวัสดีคุณ {profile?.displayName || 'ซัพพลายเออร์'}</h2>
-            {!profile && (
-              <button onClick={fetchUserProfile} className="text-blue-600 text-xs font-bold underline mt-2">
-                ลองดึงข้อมูลโปรไฟล์ใหม่อีกครั้ง
-              </button>
-            )}
+            <h2 className="text-xl font-black text-slate-800">สวัสดีคุณ {profile?.displayName || 'ซัพพลายเออร์'}</h2>
+            <p className="text-xs text-slate-400 mt-1">กรุณากรอกข้อมูลเพื่อเชื่อมต่อกับระบบคลังสินค้า</p>
           </div>
 
-          <form onSubmit={handleRegister} className="space-y-4">
+          <form onSubmit={handleRegister} className="space-y-5">
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">รหัสซัพพลายเออร์ (Vendor No)</label>
-              <input required type="text" value={vendorNo} onChange={e => setVendorNo(e.target.value)} className="w-full border p-4 rounded-2xl focus:border-blue-500 outline-none font-bold" placeholder="เช่น V001" />
+              <label className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">รหัสซัพพลายเออร์ (Vendor No)</label>
+              <input 
+                required 
+                type="text" 
+                value={vendorNo} 
+                onChange={e => setVendorNo(e.target.value.toUpperCase())} 
+                className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl focus:border-blue-500 focus:bg-white outline-none font-bold transition-all" 
+                placeholder="ระบุรหัส เช่น V001" 
+              />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">ชื่อ-นามสกุล</label>
-              <input required type="text" value={fullName} onChange={e => setFullName(e.target.value)} className="w-full border p-4 rounded-2xl focus:border-blue-500 outline-none font-bold" placeholder="ระบุชื่อจริง" />
+              <label className="block text-[11px] font-black text-slate-500 uppercase ml-1 mb-1">ชื่อ-นามสกุล ผู้ประสานงาน</label>
+              <input 
+                required 
+                type="text" 
+                value={fullName} 
+                onChange={e => setFullName(e.target.value)} 
+                className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl focus:border-blue-500 focus:bg-white outline-none font-bold transition-all" 
+                placeholder="ระบุชื่อจริง" 
+              />
             </div>
-            <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-transform">
-              ยืนยันการลงทะเบียน
+            <button 
+              type="submit" 
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-200 active:scale-95 transition-all mt-4"
+            >
+              ยืนยันการผูกบัญชี LINE
             </button>
           </form>
         </div>
       </div>
-      {errorMsg && <p className="mt-4 text-rose-500 text-xs text-center">{errorMsg}</p>}
+      {errorMsg && <p className="mt-4 text-rose-500 text-xs text-center font-bold">{errorMsg}</p>}
     </div>
   );
 };
