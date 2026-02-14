@@ -1098,7 +1098,7 @@ const sendLineNotification = async (lineUserId: string, items: any[], logId: str
           // ส่งหาทุกคนที่ผูกกับรหัส Vendor นี้ (กรณีหนึ่งบริษัทมีพนักงานใช้ LINE หลายคน)
           lineSnap.forEach(async (doc) => {
             const lineData = doc.data();
-            const LINE_ACCESS_TOKEN = "ใส่_CHANNEL_ACCESS_TOKEN_ของคุณที่นี่";
+            const LINE_ACCESS_TOKEN = "dSapPG4u6SuVdcIOXGZCWUmrcSWNQMTAEf/qRWJPc9eG4cHxfNbss0pJPJ2ggPSO55Poi5g9Pr+8itWz59QxUH980vbb/G5DTOUMZWi3d+T4+BIC1ZFk6+hJu26r8tbQWhVi5jjAFy3tP/yXyrLB9QdB04t89/1O/w1cDnyilFU=";
             
             const itemNames = items.map(i => i.part_no).join(', ');
             const lineAckLink = `${ackLink}&from=line`;
