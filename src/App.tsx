@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
+import liff from '@line/liff'; // 🚀 เพิ่มบรรทัดนี้เข้าไปครับ
 import {
   BrowserRouter as Router,
   Routes,
