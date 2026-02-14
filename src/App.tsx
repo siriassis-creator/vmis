@@ -2262,28 +2262,37 @@ const LineRegisterView = () => {
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(true);
   const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  // 🚀 ตรวจสอบ LIFF ID อีกครั้งว่าตรงกับใน Console ไหม
-  const LIFF_ID = "2009131430-9spfjff5"; 
+  const LIFF_ID = "2009118538-8SLn1atK"; 
+
+  // ฟังก์ชันดึง Profile แบบบังคับ (Force)
+  const fetchUserProfile = async () => {
+    try {
+      if (liff.isLoggedIn()) {
+        const userProfile = await liff.getProfile();
+        setProfile(userProfile);
+        setErrorMsg('');
+        return userProfile;
+      }
+    } catch (err) {
+      console.error("Fetch Profile Error:", err);
+      setErrorMsg("ไม่สามารถดึงข้อมูลโปรไฟล์ได้: " + err.message);
+    }
+    return null;
+  };
 
   useEffect(() => {
     const initLiff = async () => {
       try {
-        console.log("Starting LIFF Init...");
         await liff.init({ liffId: LIFF_ID });
-        
-        // 🚀 ระบบ Auto-Login ถ้าเปิดผ่าน Browser อื่นจะบังคับล็อกอิน LINE
         if (!liff.isLoggedIn()) {
-          console.log("User not logged in, redirecting to login...");
           liff.login();
         } else {
-          console.log("LIFF Init Success, fetching profile...");
-          const userProfile = await liff.getProfile();
-          setProfile(userProfile);
-          console.log("Profile fetched:", userProfile.displayName);
+          await fetchUserProfile(); // รอจนกว่าจะได้ Profile
         }
       } catch (err) {
-        console.error("LIFF Error Detail:", err);
+        setErrorMsg("LIFF Init Failed: " + err.message);
       } finally {
         setLoading(false);
       }
@@ -2294,39 +2303,31 @@ const LineRegisterView = () => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // 🚀 ป้องกัน Error 'userId' of null โดยการดึงใหม่หน้างานถ้าไม่มีค่า
-    let currentUserId = profile?.userId;
-    let currentDisplayName = profile?.displayName;
-    let currentPicture = profile?.pictureUrl;
+    // 🚀 จุดสำคัญ: ถ้ากดแล้วยังไม่มี ID ให้ลองดึงใหม่อีกรอบทันที
+    let currentProfile = profile;
+    if (!currentProfile) {
+      currentProfile = await fetchUserProfile();
+    }
 
-    if (!currentUserId) {
-      try {
-        const p = await liff.getProfile();
-        currentUserId = p.userId;
-        currentDisplayName = p.displayName;
-        currentPicture = p.pictureUrl;
-      } catch (err) {
-        return alert("ไม่สามารถดึง LINE ID ได้ กรุณาปิดหน้านี้แล้วเปิดใหม่จาก Rich Menu ครับ");
-      }
+    if (!currentProfile?.userId) {
+      return alert("ยังดึง LINE ID ไม่ได้ กรุณากดปุ่ม 'ลองดึงข้อมูลใหม่อีกครั้ง' หรือปิดหน้านี้แล้วเปิดใหม่ครับ");
     }
 
     if (!vendorNo || !fullName) return alert("กรุณากรอกข้อมูลให้ครบถ้วน");
 
     try {
-      // 1. ตรวจสอบรหัสซัพพลายเออร์
       const q = query(collection(db, 'suppliers'), where('vendor_no', '==', vendorNo.trim()));
       const snap = await getDocs(q);
 
       if (snap.empty) {
-        alert("ไม่พบรหัสซัพพลายเออร์ '" + vendorNo + "' ในระบบ\nกรุณาตรวจสอบรหัสให้ถูกต้อง (ตัวพิมพ์เล็ก/ใหญ่มีผล)");
+        alert("ไม่พบรหัสซัพพลายเออร์ '" + vendorNo + "' ในระบบ");
         return;
       }
 
-      // 2. บันทึกลง Firebase
-      await setDoc(doc(db, 'line_users', currentUserId), {
-        line_user_id: currentUserId,
-        line_username: currentDisplayName || 'Unknown',
-        line_picture: currentPicture || '',
+      await setDoc(doc(db, 'line_users', currentProfile.userId), {
+        line_user_id: currentProfile.userId,
+        line_username: currentProfile.displayName || 'Unknown',
+        line_picture: currentProfile.pictureUrl || '',
         full_name: fullName,
         vendor_no: vendorNo.trim(),
         registered_at: serverTimestamp()
@@ -2334,58 +2335,67 @@ const LineRegisterView = () => {
 
       setSuccess(true);
     } catch (err: any) {
-      console.error("Firebase Save Error:", err);
-      alert("บันทึกข้อมูลไม่สำเร็จ: " + err.message);
+      alert("Firebase Error: " + err.message);
     }
   };
 
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
-      <RefreshCw className="animate-spin text-indigo-600 mb-4" size={40} />
-      <p className="font-bold text-slate-600">กำลังเชื่อมต่อ LINE Profile...</p>
+      <RefreshCw className="animate-spin text-blue-600 mb-4" size={40} />
+      <p className="font-bold">กำลังเชื่อมต่อ LINE...</p>
     </div>
   );
 
-  // ... (ส่วน return success และ form ด้านล่างใช้ของเดิมได้เลยครับ หรือวางโค้ดที่ผมเคยให้ไว้ก่อนหน้า)
   if (success) return (
     <div className="min-h-screen bg-emerald-50 flex flex-col items-center justify-center p-6 text-center">
-      <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center mb-4 shadow-lg shadow-emerald-200">
-        <CheckCircle size={48} />
-      </div>
-      <h1 className="text-2xl font-black text-slate-800 mb-2">ลงทะเบียนสำเร็จ!</h1>
-      <p className="text-slate-600 mb-8 font-medium">ข้อมูลของคุณถูกผูกกับระบบ VMI เรียบร้อยแล้ว</p>
-      <button onClick={() => liff.closeWindow()} className="w-full max-w-xs bg-slate-800 text-white font-bold py-4 rounded-2xl transition-transform active:scale-95">ปิดหน้าต่าง</button>
+      <CheckCircle className="text-emerald-500 mb-4" size={80} />
+      <h1 className="text-2xl font-bold">ลงทะเบียนสำเร็จ!</h1>
+      <button onClick={() => liff.closeWindow()} className="mt-8 bg-slate-800 text-white px-8 py-3 rounded-2xl font-bold">ปิดหน้าต่าง</button>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col p-6 font-sans">
-      <div className="max-w-md mx-auto w-full bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden mt-4">
-        <div className="bg-indigo-600 p-8 text-center text-white">
-          {profile?.pictureUrl ? (
-            <img src={profile.pictureUrl} className="w-20 h-20 rounded-full mx-auto mb-4 border-4 border-white/30 shadow-lg" alt="Profile" />
-          ) : (
-            <div className="w-20 h-20 bg-white/20 rounded-full mx-auto mb-4 flex items-center justify-center"><Users size={40}/></div>
-          )}
-          <h2 className="text-xl font-bold">สวัสดีคุณ {profile?.displayName || 'ซัพพลายเออร์'}</h2>
-          <p className="text-indigo-100 text-sm mt-1 opacity-80">กรุณาผูกข้อมูลเพื่อรับรายงาน VMI</p>
+    <div className="min-h-screen bg-slate-50 p-6 flex flex-col items-center">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border overflow-hidden mt-4">
+        {/* ส่วนแสดงผลสถานะการดึง ID */}
+        <div className={`p-4 text-center ${profile ? 'bg-emerald-500' : 'bg-rose-500'} text-white`}>
+          <p className="text-xs font-bold uppercase tracking-widest">
+            {profile ? "✅ เชื่อมต่อ LINE ID สำเร็จ" : "❌ ยังดึง LINE ID ไม่ได้"}
+          </p>
+          <p className="text-[10px] opacity-80 break-all font-mono">
+            ID: {profile?.userId || "Waiting..."}
+          </p>
         </div>
-        
-        <form onSubmit={handleRegister} className="p-8 space-y-6">
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">รหัสซัพพลายเออร์ (Vendor No)</label>
-            <input required type="text" value={vendorNo} onChange={e => setVendorNo(e.target.value)} className="w-full border-2 border-slate-100 p-4 rounded-2xl focus:border-indigo-500 outline-none transition-all font-mono font-bold text-lg" placeholder="ระบุรหัส เช่น V001" />
+
+        <div className="p-8 space-y-6">
+          <div className="text-center">
+            {profile?.pictureUrl && (
+              <img src={profile.pictureUrl} className="w-20 h-20 rounded-full mx-auto mb-2 border-4 border-slate-100 shadow-md" alt="Profile" />
+            )}
+            <h2 className="text-xl font-bold">สวัสดีคุณ {profile?.displayName || 'ซัพพลายเออร์'}</h2>
+            {!profile && (
+              <button onClick={fetchUserProfile} className="text-blue-600 text-xs font-bold underline mt-2">
+                ลองดึงข้อมูลโปรไฟล์ใหม่อีกครั้ง
+              </button>
+            )}
           </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">ชื่อ-นามสกุล ของท่าน</label>
-            <input required type="text" value={fullName} onChange={e => setFullName(e.target.value)} className="w-full border-2 border-slate-100 p-4 rounded-2xl focus:border-indigo-500 outline-none transition-all font-bold" placeholder="ระบุชื่อเพื่อบันทึกข้อมูล" />
-          </div>
-          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-indigo-200 transition-all active:scale-95 text-lg">
-            ลงทะเบียนเข้าใช้งาน
-          </button>
-        </form>
+
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">รหัสซัพพลายเออร์ (Vendor No)</label>
+              <input required type="text" value={vendorNo} onChange={e => setVendorNo(e.target.value)} className="w-full border p-4 rounded-2xl focus:border-blue-500 outline-none font-bold" placeholder="เช่น V001" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">ชื่อ-นามสกุล</label>
+              <input required type="text" value={fullName} onChange={e => setFullName(e.target.value)} className="w-full border p-4 rounded-2xl focus:border-blue-500 outline-none font-bold" placeholder="ระบุชื่อจริง" />
+            </div>
+            <button type="submit" className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-transform">
+              ยืนยันการลงทะเบียน
+            </button>
+          </form>
+        </div>
       </div>
-      <p className="text-center text-slate-400 text-[10px] mt-8 uppercase tracking-widest">VMI LINE System Secure Link</p>
+      {errorMsg && <p className="mt-4 text-rose-500 text-xs text-center">{errorMsg}</p>}
     </div>
   );
 };
