@@ -2263,21 +2263,27 @@ const LineRegisterView = () => {
   const [loading, setLoading] = useState(true);
   const [success, setSuccess] = useState(false);
 
-  // 🚀 ใส่ LIFF ID ที่ได้จาก Line Developers Console
-  const LIFF_ID = "2009118538-8SLn1atK"; // <-- แทนที่ด้วย LIFF ID ของคุณ
+  // 🚀 ตรวจสอบ LIFF ID อีกครั้งว่าตรงกับใน Console ไหม
+  const LIFF_ID = "2009118538-8SLn1atK"; 
 
   useEffect(() => {
     const initLiff = async () => {
       try {
+        console.log("Starting LIFF Init...");
         await liff.init({ liffId: LIFF_ID });
+        
+        // 🚀 ระบบ Auto-Login ถ้าเปิดผ่าน Browser อื่นจะบังคับล็อกอิน LINE
         if (!liff.isLoggedIn()) {
+          console.log("User not logged in, redirecting to login...");
           liff.login();
         } else {
+          console.log("LIFF Init Success, fetching profile...");
           const userProfile = await liff.getProfile();
           setProfile(userProfile);
+          console.log("Profile fetched:", userProfile.displayName);
         }
       } catch (err) {
-        console.error("LIFF Init Error", err);
+        console.error("LIFF Error Detail:", err);
       } finally {
         setLoading(false);
       }
@@ -2287,38 +2293,60 @@ const LineRegisterView = () => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 🚀 ป้องกัน Error 'userId' of null โดยการดึงใหม่หน้างานถ้าไม่มีค่า
+    let currentUserId = profile?.userId;
+    let currentDisplayName = profile?.displayName;
+    let currentPicture = profile?.pictureUrl;
+
+    if (!currentUserId) {
+      try {
+        const p = await liff.getProfile();
+        currentUserId = p.userId;
+        currentDisplayName = p.displayName;
+        currentPicture = p.pictureUrl;
+      } catch (err) {
+        return alert("ไม่สามารถดึง LINE ID ได้ กรุณาปิดหน้านี้แล้วเปิดใหม่จาก Rich Menu ครับ");
+      }
+    }
+
     if (!vendorNo || !fullName) return alert("กรุณากรอกข้อมูลให้ครบถ้วน");
 
     try {
-      // 1. ตรวจสอบว่ามี Vendor No นี้ในระบบจริงไหม
+      // 1. ตรวจสอบรหัสซัพพลายเออร์
       const q = query(collection(db, 'suppliers'), where('vendor_no', '==', vendorNo.trim()));
       const snap = await getDocs(q);
 
       if (snap.empty) {
-        alert("ไม่พบรหัสซัพพลายเออร์นี้ในระบบ กรุณาตรวจสอบรหัสอีกครั้ง");
+        alert("ไม่พบรหัสซัพพลายเออร์ '" + vendorNo + "' ในระบบ\nกรุณาตรวจสอบรหัสให้ถูกต้อง (ตัวพิมพ์เล็ก/ใหญ่มีผล)");
         return;
       }
 
-      // 2. บันทึกลง Firebase Collection 'line_users'
-      await setDoc(doc(db, 'line_users', profile.userId), {
-        line_user_id: profile.userId,
-        line_username: profile.displayName,
-        line_picture: profile.pictureUrl,
+      // 2. บันทึกลง Firebase
+      await setDoc(doc(db, 'line_users', currentUserId), {
+        line_user_id: currentUserId,
+        line_username: currentDisplayName || 'Unknown',
+        line_picture: currentPicture || '',
         full_name: fullName,
         vendor_no: vendorNo.trim(),
         registered_at: serverTimestamp()
       });
 
       setSuccess(true);
-    } catch (err) {
-      console.error("Firebase Error:", err);
-      // 🚀 แก้บรรทัดนี้เพื่อให้มันบอกว่าพังเพราะอะไร
-      alert("เกิดข้อผิดพลาด: " + err.message);
+    } catch (err: any) {
+      console.error("Firebase Save Error:", err);
+      alert("บันทึกข้อมูลไม่สำเร็จ: " + err.message);
     }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 font-bold">กำลังเชื่อมต่อ LINE...</div>;
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+      <RefreshCw className="animate-spin text-indigo-600 mb-4" size={40} />
+      <p className="font-bold text-slate-600">กำลังเชื่อมต่อ LINE Profile...</p>
+    </div>
+  );
 
+  // ... (ส่วน return success และ form ด้านล่างใช้ของเดิมได้เลยครับ หรือวางโค้ดที่ผมเคยให้ไว้ก่อนหน้า)
   if (success) return (
     <div className="min-h-screen bg-emerald-50 flex flex-col items-center justify-center p-6 text-center">
       <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center mb-4 shadow-lg shadow-emerald-200">
@@ -2326,16 +2354,20 @@ const LineRegisterView = () => {
       </div>
       <h1 className="text-2xl font-black text-slate-800 mb-2">ลงทะเบียนสำเร็จ!</h1>
       <p className="text-slate-600 mb-8 font-medium">ข้อมูลของคุณถูกผูกกับระบบ VMI เรียบร้อยแล้ว</p>
-      <button onClick={() => liff.closeWindow()} className="w-full max-w-xs bg-slate-800 text-white font-bold py-4 rounded-2xl">ปิดหน้าต่าง</button>
+      <button onClick={() => liff.closeWindow()} className="w-full max-w-xs bg-slate-800 text-white font-bold py-4 rounded-2xl transition-transform active:scale-95">ปิดหน้าต่าง</button>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col p-6 font-sans">
-      <div className="max-w-md mx-auto w-full bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden mt-8">
+      <div className="max-w-md mx-auto w-full bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden mt-4">
         <div className="bg-indigo-600 p-8 text-center text-white">
-          <img src={profile?.pictureUrl} className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-white/30 shadow-lg" alt="Profile" />
-          <h2 className="text-xl font-bold">สวัสดีคุณ {profile?.displayName}</h2>
+          {profile?.pictureUrl ? (
+            <img src={profile.pictureUrl} className="w-20 h-20 rounded-full mx-auto mb-4 border-4 border-white/30 shadow-lg" alt="Profile" />
+          ) : (
+            <div className="w-20 h-20 bg-white/20 rounded-full mx-auto mb-4 flex items-center justify-center"><Users size={40}/></div>
+          )}
+          <h2 className="text-xl font-bold">สวัสดีคุณ {profile?.displayName || 'ซัพพลายเออร์'}</h2>
           <p className="text-indigo-100 text-sm mt-1 opacity-80">กรุณาผูกข้อมูลเพื่อรับรายงาน VMI</p>
         </div>
         
@@ -2353,7 +2385,7 @@ const LineRegisterView = () => {
           </button>
         </form>
       </div>
-      <p className="text-center text-slate-400 text-xs mt-8">VMI LINE System v1.0</p>
+      <p className="text-center text-slate-400 text-[10px] mt-8 uppercase tracking-widest">VMI LINE System Secure Link</p>
     </div>
   );
 };
