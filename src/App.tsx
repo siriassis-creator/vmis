@@ -463,8 +463,15 @@ const HomeView = () => {
 // ==========================================
 // 🌟 หน้า Tracking View 
 // ==========================================
+// ==========================================
+// 🌟 หน้า Tracking View (เวอร์ชันแยก Tab สถานะ)
+// ==========================================
+// ==========================================
+// 🌟 หน้า Tracking View (เวอร์ชัน Tab ชื่อล้วน)
+// ==========================================
 const TrackingView = () => {
   const [trackings, setTrackings] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState(1);
 
   useEffect(() => {
     const q = query(collection(db, 'tracking'), orderBy('updatedAt', 'desc'));
@@ -486,6 +493,13 @@ const TrackingView = () => {
       console.error("Update Tracking Error", e);
     }
   };
+
+  const filteredTrackings = trackings.filter((track) => {
+    if (activeTab === 1) return track.current_status === 1;
+    if (activeTab === 2) return track.current_status === 2 || track.current_status === 3;
+    if (activeTab === 3) return track.current_status === 4;
+    return true;
+  });
 
   const StatusStepper = ({ currentStatus, timestamps }: any) => {
     const steps = [
@@ -509,8 +523,8 @@ const TrackingView = () => {
                   {isActive ? <CheckCircle size={16} /> : step.id}
                 </div>
                 <div className="mt-2 text-center w-full flex flex-col items-center">
-                  <p className={`text-[11px] font-bold ${isActive ? 'text-slate-800' : 'text-slate-400'}`}>{step.label}</p>
-                  <p className="text-[10px] text-slate-500 font-mono mt-0.5 leading-tight">{formatTrackingDate(time)}</p>
+                  <p className={`text-[10px] md:text-[11px] font-bold ${isActive ? 'text-slate-800' : 'text-slate-400'}`}>{step.label}</p>
+                  <p className="text-[9px] text-slate-500 font-mono mt-0.5 leading-tight">{formatTrackingDate(time)}</p>
                 </div>
               </div>
               {index < steps.length - 1 && (
@@ -525,64 +539,90 @@ const TrackingView = () => {
 
   return (
     <PageTemplate title="Delivery Tracking">
-      <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col overflow-hidden">
-        <div className="space-y-6 flex flex-col h-full relative">
-          <div>
-            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <Truck className="text-cyan-500" /> Tracking Board
-            </h3>
-            <p className="text-sm text-slate-500 mt-1">ติดตามสถานะการจัดส่ง (จำลองการรับค่าจาก Line OA Flex Message)</p>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col overflow-hidden text-left">
+        
+        <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/30">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 text-left">
+            <div>
+              <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <Truck className="text-cyan-500" /> Tracking Board
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">ติดตามสถานะการเติมสินค้าแยกตามขั้นตอน</p>
+            </div>
+            <div className="flex gap-2">
+               <span className="bg-white border px-3 py-1 rounded-full text-xs font-bold text-slate-600 shadow-sm">
+                 ทั้งหมด {trackings.length} รายการ
+               </span>
+            </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 pb-6 space-y-4">
-            {trackings.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                <MapPin size={48} className="mb-4 opacity-50" />
-                <p>ยังไม่มีรายการจัดส่งในขณะนี้</p>
-              </div>
-            ) : (
-              trackings.map((track) => (
-                <div key={track.id} className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h4 className="font-bold text-lg text-cyan-900">{track.supplier_name}</h4>
-                      <p className="text-xs text-slate-500 font-mono">T-ID: {track.id}</p>
+          {/* 🚀 Tab Navigation (ตัดตัวเลขหน้าชื่อออกแล้ว) */}
+          <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-fit">
+            <button 
+              onClick={() => setActiveTab(1)} 
+              className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 1 ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              รอเตรียมสินค้า ({trackings.filter(t => t.current_status === 1).length})
+            </button>
+            <button 
+              onClick={() => setActiveTab(2)} 
+              className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 2 ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              อยู่ระหว่างจัดส่ง ({trackings.filter(t => t.current_status === 2 || t.current_status === 3).length})
+            </button>
+            <button 
+              onClick={() => setActiveTab(3)} 
+              className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 3 ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              จัดส่งเรียบร้อยแล้ว ({trackings.filter(t => t.current_status === 4).length})
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-4 bg-slate-50/30">
+          {filteredTrackings.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 py-20">
+              <MapPin size={48} className="mb-4 opacity-20" />
+              <p className="font-bold italic">ไม่พบรายการในหมวดหมู่นี้</p>
+            </div>
+          ) : (
+            filteredTrackings.map((track) => (
+              <div key={track.id} className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow animate-fade-in text-left">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-lg text-slate-800">{track.supplier_name}</h4>
+                      {track.ack_source === 'line' && <span className="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full font-bold border border-emerald-200">LINE</span>}
                     </div>
-                    {track.current_status === 4 ? (
-                      <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold border border-emerald-200 flex items-center gap-1">
-                        <CheckCheck size={14}/> โรงงานรับสินค้าแล้ว
-                      </span>
-                    ) : (
-                      <span className="bg-cyan-100 text-cyan-700 px-3 py-1 rounded-full text-xs font-bold border border-cyan-200 flex items-center gap-1 animate-pulse">
-                        <Truck size={14}/> กำลังดำเนินการจัดส่ง
-                      </span>
-                    )}
+                    <p className="text-xs text-slate-500 font-mono">Tracking ID: {track.id}</p>
                   </div>
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${track.current_status === 4 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                    {track.current_status === 1 ? 'WAITING' : track.current_status === 4 ? 'COMPLETED' : 'IN TRANSIT'}
+                  </span>
+                </div>
 
-                  <StatusStepper currentStatus={track.current_status} timestamps={track.status_timestamps} />
+                <StatusStepper currentStatus={track.current_status} timestamps={track.status_timestamps} />
 
-                  <div className="mt-6 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <p className="text-xs font-bold text-slate-500 mb-2">รายการสินค้าในเที่ยวนี้ ({track.items?.length || 0}):</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {track.items?.map((item: any, idx: number) => (
-                        <div key={idx} className="bg-white px-3 py-2 rounded-lg border border-slate-200 text-sm flex justify-between items-center shadow-sm">
-                          <span className="font-mono font-bold text-slate-700 truncate mr-2" title={item.description}>{item.part_no}</span>
-                          <span className="text-red-600 font-bold bg-red-50 px-2 rounded">ขาด {((item.min || 0) - (item.qty || 0)).toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-2 items-center">
-                    <span className="text-xs font-bold text-slate-400 mr-2 uppercase">Line OA Simulator:</span>
-                    <button onClick={() => simulateLineOAUpdate(track.id, 2)} disabled={track.current_status >= 2} className="text-[11px] px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-bold border border-blue-200 disabled:opacity-50 transition-colors">กด กำลังจัดส่ง</button>
-                    <button onClick={() => simulateLineOAUpdate(track.id, 3)} disabled={track.current_status >= 3} className="text-[11px] px-3 py-1.5 rounded-lg bg-orange-50 text-orange-700 font-bold border border-orange-200 disabled:opacity-50 transition-colors">กด ถึงโรงงาน</button>
-                    <button onClick={() => simulateLineOAUpdate(track.id, 4)} disabled={track.current_status >= 4} className="text-[11px] px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 disabled:opacity-50 transition-colors">กด โรงงานรับสินค้า</button>
+                <div className="mt-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {track.items?.map((item: any, idx: number) => (
+                      <div key={idx} className="bg-white px-3 py-2 rounded-lg border border-slate-200 text-xs flex justify-between items-center shadow-sm">
+                        <span className="font-mono font-bold text-slate-700 truncate mr-2">{item.part_no}</span>
+                        <span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded">ขาด {(item.min - item.qty).toLocaleString()}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))
-            )}
-          </div>
+
+                <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-2 items-center">
+                  <span className="text-[10px] font-bold text-slate-400 mr-2 uppercase">ปรับสถานะ:</span>
+                  <button onClick={() => simulateLineOAUpdate(track.id, 2)} disabled={track.current_status >= 2} className="text-[11px] px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-bold border border-blue-200 disabled:opacity-30">กำลังจัดส่ง</button>
+                  <button onClick={() => simulateLineOAUpdate(track.id, 3)} disabled={track.current_status >= 3} className="text-[11px] px-3 py-1.5 rounded-lg bg-orange-50 text-orange-700 font-bold border border-orange-200 disabled:opacity-30">ถึงโรงงาน</button>
+                  <button onClick={() => simulateLineOAUpdate(track.id, 4)} disabled={track.current_status >= 4} className="text-[11px] px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold disabled:bg-slate-200 transition-colors">รับสินค้าเข้าคลัง</button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </PageTemplate>
@@ -1028,8 +1068,12 @@ const sendLineNotification = async (lineUserId: string, items: any[], logId: str
     return () => { unsubProd(); unsubSup(); };
   }, []);
 
-  const lowStockProducts = products.filter((p) => p.available_qty <= p.min_stock && p.min_stock > 0);
-
+// เลือกเฉพาะสินค้าที่ต่ำกว่า Min และต้องยังไม่ได้กดรับทราบ (Ack) เท่านั้น
+const lowStockProducts = products.filter((p) => {
+  const isBelowMin = p.available_qty <= p.min_stock && p.min_stock > 0;
+  const notAckedYet = !p.is_acknowledged; // 🚩 ถ้า Ack แล้วไม่ต้องเอามาโชว์ใน Workflow
+  return isBelowMin && notAckedYet;
+});
   const ordersBySupplier = lowStockProducts.reduce((acc, product) => {
     const supName = product.supplier_name || 'รอการผูกข้อมูล';
     if (!acc[supName]) acc[supName] = [];
@@ -1041,10 +1085,10 @@ const sendLineNotification = async (lineUserId: string, items: any[], logId: str
     // 1. หาข้อมูลซัพพลายเออร์จากฐานข้อมูลหลัก เพื่อเอารหัส Vendor No
     const matchedSup = suppliers.find((s) => s.vendor_name === supplierName);
     const supplierEmail = matchedSup?.supplier_email || '';
-    const vendorNo = matchedSup?.vendor_no; // 🚀 ดึงรหัส Vendor No ออกมา
+    const vendorNo = matchedSup?.vendor_no;
 
     if (!supplierEmail) {
-      alert(`⚠️ ไม่พบ Email ของซัพพลายเออร์ "${supplierName}"`);
+      alert(`⚠️ ไม่พบ Email ของซัพพลายเออร์ "${supplierName}"\nกรุณาไปเพิ่ม Email ในเมนู Supplier Mgt. ก่อนครับ`);
       return;
     }
 
@@ -1057,10 +1101,10 @@ const sendLineNotification = async (lineUserId: string, items: any[], logId: str
     } catch (e) {}
 
     try {
-      // 2. บันทึก Log การส่ง (เพิ่มฟิลด์ vendor_no เพื่อความแม่นยำ)
+      // 2. บันทึกลง Log ใน Firebase
       const logRef = await addDoc(collection(db, 'email_logs'), {
         supplier_name: supplierName,
-        vendor_no: vendorNo, // 🚀 เก็บไว้ตรวจสอบภายหลัง
+        vendor_no: vendorNo || '',
         supplier_email: supplierEmail,
         items: items.map((i) => ({
           product_id: i.id,
@@ -1072,32 +1116,53 @@ const sendLineNotification = async (lineUserId: string, items: any[], logId: str
         sent_at: serverTimestamp(),
         acknowledged: false,
         acknowledged_at: null,
+        ack_source: null,
         sent_by: currentUserName,
       });
 
       const ackLink = `${window.location.origin}/acknowledge?id=${logRef.id}`;
+      const subject = `[VMI System] แจ้งเติมสต็อกสินค้าด่วน - ${supplierName} (${vendorNo || ''})`;
 
-      // --- [ส่วนการส่ง Email คงเดิม] ---
+      // --- 🚀 กู้คืน Email Template ตัวเดิมที่ใช้งานได้ดีกลับมา ---
+      let body = `<div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">`;
+      body += `<p>เรียน ทีมงาน <b>${supplierName}</b>,</p>`;
+      body += `<p>ระบบ VMI ตรวจพบว่าสินค้าของท่านมียอดคงเหลือต่ำกว่าจุดสั่งซื้อ (Min Stock)<br/>`;
+      body += `โปรดดำเนินการจัดเตรียมและจัดส่งสินค้าดังต่อไปนี้ ภายใน 5 วันทำการ:</p>`;
+      body += `<div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0;">`;
+      
+      items.forEach((item, index) => {
+        const orderQty = item.min_stock - item.available_qty;
+        body += `<p style="margin: 0 0 10px 0; padding-bottom: 10px; border-bottom: 1px dashed #cbd5e1;">`;
+        body += `<b>${index + 1}. P/N: ${item.part_no}</b><br/>`;
+        body += `ชื่อสินค้า: ${item.description}<br/>`;
+        body += `ยอดคงเหลือปัจจุบัน: <span style="color:#ef4444; font-weight:bold;">${item.available_qty.toLocaleString()}</span> | จุดสั่งซื้อ (Min): ${item.min_stock.toLocaleString()}<br/>`;
+        body += `<span style="color:#10b981; font-weight:bold;">>>> จำนวนที่แนะนำให้ส่ง: ${orderQty > 0 ? orderQty.toLocaleString() : 'ตรวจสอบยอด'}</span>`;
+        body += `</p>`;
+      });
+      
+      body += `</div>`;
+      body += `<p>📌 <b>รบกวนกดปุ่มด้านล่างนี้ เพื่อยืนยันว่าท่าน "รับทราบ" การแจ้งเตือนนี้แล้วครับ:</b></p>`;
+      body += `<p><a href="${ackLink}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">✅ คลิกเพื่อรับทราบการจัดส่ง</a></p>`;
+      body += `<br/><p>ขอบคุณครับ<br/>ฝ่ายจัดซื้อ / แผนกคลังสินค้า<br/>`;
+      body += `<span style="color:#94a3b8; font-size: 12px;">(ผู้ทำรายการ: ${currentUserName})</span></p>`;
+      body += `</div>`;
+
       const serviceId = 'service_ym7bjkn';
       const templateId = 'template_g2denka';
       const publicKey = 'mZ-fOmq0CV0gZQvdF';
-      const templateParams = { 
-        supplier_email: supplierEmail, 
-        subject: `[VMI System] แจ้งเติมสต็อกด่วน - ${vendorNo}`, 
-        message: `...เนื้อหาอีเมลของคุณ...` // ใช้ body เดิมที่เคยเขียนไว้
-      };
+      const templateParams = { supplier_email: supplierEmail, subject: subject, message: body };
+      
+      // ส่ง Email
       await emailjs.send(serviceId, templateId, templateParams, publicKey);
 
-      // --- 🚀 ส่วนส่ง LINE: ค้นหาด้วย Vendor No ---
+      // --- 🚀 เพิ่มส่วนส่ง LINE โดยอ้างอิงรหัส Vendor ---
       if (vendorNo) {
-        // ค้นหาใน line_users ว่าใครผูกกับรหัส Vendor นี้ไว้
         const lineQuery = query(collection(db, 'line_users'), where('vendor_no', '==', vendorNo));
         const lineSnap = await getDocs(lineQuery);
 
         if (!lineSnap.empty) {
-          // ส่งหาทุกคนที่ผูกกับรหัส Vendor นี้ (กรณีหนึ่งบริษัทมีพนักงานใช้ LINE หลายคน)
-          lineSnap.forEach(async (doc) => {
-            const lineData = doc.data();
+          lineSnap.forEach(async (lineDoc) => {
+            const lineData = lineDoc.data();
             const LINE_ACCESS_TOKEN = "dSapPG4u6SuVdcIOXGZCWUmrcSWNQMTAEf/qRWJPc9eG4cHxfNbss0pJPJ2ggPSO55Poi5g9Pr+8itWz59QxUH980vbb/G5DTOUMZWi3d+T4+BIC1ZFk6+hJu26r8tbQWhVi5jjAFy3tP/yXyrLB9QdB04t89/1O/w1cDnyilFU=";
             
             const itemNames = items.map(i => i.part_no).join(', ');
@@ -1107,16 +1172,17 @@ const sendLineNotification = async (lineUserId: string, items: any[], logId: str
               to: lineData.line_user_id,
               messages: [{
                 type: "flex",
-                altText: `VMI Alert: ${vendorNo}`,
+                altText: `VMI ALERT: ${vendorNo}`,
                 contents: {
                   type: "bubble",
-                  header: { type: "box", layout: "vertical", contents: [{ type: "text", text: `🚨 VMI ALERT: ${vendorNo}`, weight: "bold", color: "#EF4444", size: "sm" }] },
+                  header: { type: "box", layout: "vertical", contents: [{ type: "text", text: "🚨 VMI ALERT", weight: "bold", color: "#EF4444", size: "sm" }] },
                   body: {
                     type: "box", layout: "vertical", contents: [
-                      { type: "text", text: "พบสินค้าต่ำกว่ากำหนด", weight: "bold", size: "lg" },
-                      { type: "text", text: `ซัพพลายเออร์: ${supplierName}`, size: "xs", color: "#666666" },
+                      { type: "text", text: "รายการสินค้าต่ำกว่ากำหนด", weight: "bold", size: "lg" },
+                      { type: "text", text: `รหัสซัพพลายเออร์: ${vendorNo}`, size: "xs", color: "#666666", margin: "xs" },
                       { type: "separator", margin: "md" },
-                      { type: "text", text: `P/N: ${itemNames}`, size: "sm", wrap: true, margin: "md" }
+                      { type: "text", text: `สินค้าที่ขาด: ${itemNames}`, size: "sm", wrap: true, margin: "md", color: "#333333" },
+                      { type: "text", text: "โปรดกดยืนยันการจัดส่งผ่านปุ่มด้านล่าง", size: "xs", color: "#999999", margin: "md" }
                     ]
                   },
                   footer: {
@@ -1137,20 +1203,14 @@ const sendLineNotification = async (lineUserId: string, items: any[], logId: str
         }
       }
 
-      // 3. อัปเดตสถานะสินค้า
-      const updatePromises = items.map((item) => 
-        updateDoc(doc(db, 'products', item.id), { 
-          is_emailed: true, 
-          last_emailed_at: serverTimestamp(), 
-          is_acknowledged: false 
-        })
-      );
+      // 3. อัปเดตสถานะในฐานข้อมูลสินค้า
+      const updatePromises = items.map((item) => updateDoc(doc(db, 'products', item.id), { is_emailed: true, last_emailed_at: serverTimestamp(), is_acknowledged: false, acknowledged_at: null }));
       await Promise.all(updatePromises);
       
-      alert(`✅ ส่งแจ้งเตือนเรียบร้อย (อ้างอิงรหัสซัพพลายเออร์: ${vendorNo})`);
+      alert(`✅ ส่งแจ้งเตือนสำเร็จ!\n(Email: ${supplierEmail}${!lineSnap.empty ? ' + LINE Notification' : ''})`);
     } catch (error) {
-      console.error(error);
-      alert(`❌ ผิดพลาด: ${error.message}`);
+      console.error('Send Error:', error);
+      alert(`❌ การส่งข้อมูลล้มเหลว`);
     } finally {
       setSendingEmailId(null);
     }
@@ -1559,59 +1619,94 @@ const StockManagementView = () => {
     if (!file) return;
     setIsImporting(true);
     let parsedData: any[] = [];
+    
     try {
       const arrayBuffer = await file.arrayBuffer();
       const data = new Uint8Array(arrayBuffer);
       const workbook = XLSX.read(data, { type: 'array' });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
       for (const row of jsonData) {
         const getVal = (searchStr: string) => {
           const target = searchStr.toLowerCase().replace(/[^a-z0-9]/g, '');
           const key = Object.keys(row).find((k) => k.toLowerCase().replace(/[^a-z0-9]/g, '') === target);
           return key ? row[key] : undefined;
         };
+
         const part_no = String(getVal('Part No') || '').trim();
         if (part_no) {
           parsedData.push({
-            part_no, description: String(getVal('Description') || '').trim(), site: String(getVal('Site') || '').trim(), config_id: String(getVal('Configuration ID') || '').trim(), project_id: String(getVal('Project ID') || '').trim(),
-            on_hand_qty: Number(String(getVal('On Hand Qty') || '0').replace(/,/g, '')) || 0, supply: Number(String(getVal('Supply') || '0').replace(/,/g, '')) || 0, demand: Number(String(getVal('Demand') || '0').replace(/,/g, '')) || 0,
+            part_no,
+            description: String(getVal('Description') || '').trim(),
+            site: String(getVal('Site') || '').trim(),
+            config_id: String(getVal('Configuration ID') || '').trim(),
+            project_id: String(getVal('Project ID') || '').trim(),
+            on_hand_qty: Number(String(getVal('On Hand Qty') || '0').replace(/,/g, '')) || 0,
+            supply: Number(String(getVal('Supply') || '0').replace(/,/g, '')) || 0,
+            demand: Number(String(getVal('Demand') || '0').replace(/,/g, '')) || 0,
             available_qty: Number(String(getVal('Available Qty') || '0').replace(/,/g, '')) || 0,
           });
         }
       }
-      if (parsedData.length === 0) throw new Error('ไม่พบ Part No');
+
+      if (parsedData.length === 0) throw new Error('ไม่พบข้อมูล Part No ในไฟล์');
 
       let added = 0, updated = 0;
       for (const item of parsedData) {
         const existing = products.find((p) => p.part_no === item.part_no);
         const matchedSup = suppliers.find((s) => s.part_no === item.part_no);
-        const supName = matchedSup ? matchedSup.vendor_name || 'ไม่ระบุชื่อ' : 'รอการผูกข้อมูล';
+        const supName = matchedSup ? (matchedSup.vendor_name || 'ไม่ระบุชื่อ') : 'รอการผูกข้อมูล';
         const minStk = getLatestMinStock(matchedSup);
 
-        let isEmailed = existing ? existing.is_emailed || false : false;
-        let lastEmailedAt = existing ? existing.last_emailed_at || null : null;
-        let isAcknowledged = existing ? existing.is_acknowledged || false : false;
-        let acknowledgedAt = existing ? existing.acknowledged_at || null : null;
-
-        if (item.available_qty > minStk) {
-          isEmailed = false;
-          lastEmailedAt = null;
-          isAcknowledged = false;
-          acknowledgedAt = null;
-        }
-
         if (existing) {
-          await updateDoc(doc(db, 'products', existing.id), { ...item, supplier_name: supName, min_stock: minStk, is_emailed: isEmailed, last_emailed_at: lastEmailedAt, is_acknowledged: isAcknowledged, acknowledged_at: acknowledgedAt, updatedAt: serverTimestamp() });
+          // 🚀 [Logic ปรับปรุง] การจัดการสถานะแจ้งเตือน
+          let isEmailed = existing.is_emailed || false;
+          let lastEmailedAt = existing.last_emailed_at || null;
+          let isAcknowledged = existing.is_acknowledged || false;
+          let acknowledgedAt = existing.acknowledged_at || null;
+
+          // 🚩 ถ้าสต็อกถูกเติมจนสูงกว่า Min (ของมาส่งแล้ว)
+          // ให้รีเซ็ตทุกอย่างเป็น false เพื่อให้เริ่ม Loop การแจ้งเตือนใหม่ได้ในอนาคต
+          if (item.available_qty > minStk) {
+            isEmailed = false;
+            lastEmailedAt = null;
+            isAcknowledged = false;
+            acknowledgedAt = null;
+          }
+
+          await updateDoc(doc(db, 'products', existing.id), { 
+            ...item, 
+            supplier_name: supName, 
+            min_stock: minStk, 
+            is_emailed: isEmailed, 
+            last_emailed_at: lastEmailedAt, 
+            is_acknowledged: isAcknowledged, 
+            acknowledged_at: acknowledgedAt, 
+            updatedAt: serverTimestamp() 
+          });
           updated++;
         } else {
-          await addDoc(collection(db, 'products'), { ...item, min_stock: minStk, supplier_name: supName, is_emailed: false, last_emailed_at: null, is_acknowledged: false, acknowledged_at: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+          // กรณีเพิ่มสินค้าใหม่เข้าระบบครั้งแรก
+          await addDoc(collection(db, 'products'), { 
+            ...item, 
+            min_stock: minStk, 
+            supplier_name: supName, 
+            is_emailed: false, 
+            last_emailed_at: null, 
+            is_acknowledged: false, 
+            acknowledged_at: null, 
+            createdAt: serverTimestamp(), 
+            updatedAt: serverTimestamp() 
+          });
           added++;
         }
       }
 
+      // บันทึกเวลาที่อัปเดตล่าสุด
       await setDoc(doc(db, 'system', 'meta'), { last_stock_upload: serverTimestamp() }, { merge: true });
 
+      // บันทึก Log การอัปโหลด
       let currentUserName = 'System';
       try {
         const userStr = localStorage.getItem('vmi_user');
@@ -1626,8 +1721,13 @@ const StockManagementView = () => {
         uploaded_by: currentUserName, 
       });
 
-      alert(`✅ อัปโหลดเสร็จสิ้น!\nข้อมูลทั้งหมด: ${parsedData.length} รายการ\nเพิ่มใหม่: ${added} | อัปเดต: ${updated}`);
-    } catch (error: any) { alert('❌ เกิดข้อผิดพลาด: ' + error.message); } finally { setIsImporting(false); if (e.target) e.target.value = ''; }
+      alert(`✅ อัปโหลดสำเร็จ!\nทั้งหมด: ${parsedData.length} รายการ\nเพิ่มใหม่: ${added} | อัปเดต: ${updated}`);
+    } catch (error: any) { 
+      alert('❌ เกิดข้อผิดพลาด: ' + error.message); 
+    } finally { 
+      setIsImporting(false); 
+      if (e.target) e.target.value = ''; 
+    }
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
